@@ -1,8 +1,8 @@
 # Panoptes
 
-AI-assisted code vulnerability scanner. This repository is at Phase 0
-(skeleton only): Compose brings up PostgreSQL, the FastAPI backend, the React
-frontend, and Ollama. Scanning, auth, and explanations come in later phases.
+AI-assisted code vulnerability scanner. Phase 1 adds registration, login, and
+projects that belong to the logged-in user. Scanning and explanations come in
+later phases.
 
 ## Run
 

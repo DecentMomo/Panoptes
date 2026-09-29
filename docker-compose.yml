@@ -28,6 +28,8 @@ services:
       # Compose-level values win over env_file so the service hostname stays
       # correct even if a host-oriented DATABASE_URL is set in .env.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-panoptes}:${POSTGRES_PASSWORD:-panoptes}@db:5432/${POSTGRES_DB:-panoptes}
+      # Inside the container the database host is the Compose service, not localhost.
+      TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-panoptes}:${POSTGRES_PASSWORD:-panoptes}@db:5432/panoptes_test
       OLLAMA_BASE_URL: http://ollama:11434
       # Docker Desktop on Windows does not forward filesystem events into
       # containers, so uvicorn's reloader has to poll.

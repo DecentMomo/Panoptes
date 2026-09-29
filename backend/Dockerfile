@@ -14,6 +14,7 @@ COPY alembic ./alembic
 # Dev extras are installed so `pytest` and `ruff` work inside the container
 # during local verification. Scanner binaries are added in later phases.
 RUN pip install --no-cache-dir ".[dev]" \
+    && rm -rf build *.egg-info \
     && useradd --create-home --uid 1000 panoptes \
     && chown -R panoptes:panoptes /app
 

@@ -39,6 +39,7 @@ jobs:
         run: pytest
         env:
           DATABASE_URL: postgresql+psycopg://panoptes:panoptes@localhost:5432/panoptes
+          TEST_DATABASE_URL: postgresql+psycopg://panoptes:panoptes@localhost:5432/panoptes_test
 
   frontend:
     runs-on: ubuntu-latest
