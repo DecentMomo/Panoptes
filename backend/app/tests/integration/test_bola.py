@@ -20,3 +20,33 @@ async def test_user_cannot_access_another_users_project(clients) -> None:
 
     # Alice's project is unchanged.
     assert (await alice.get(f"/projects/{project_id}")).json()["name"] == "Alice only"
+
+
+async def test_user_cannot_access_another_users_scan(clients, tmp_path) -> None:
+    alice = clients()
+    bob = clients()
+    await register_and_login(alice, "alice@example.com")
+    await register_and_login(bob, "bob@example.com")
+
+    created = await alice.post("/projects", json={"name": "Alice only"})
+    project_id = created.json()["id"]
+    archive = tmp_path / "code.zip"
+    import zipfile
+
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("app.py", "x = 1\n")
+    uploaded = await alice.post(
+        f"/projects/{project_id}/scans",
+        files={"file": ("code.zip", archive.read_bytes(), "application/zip")},
+    )
+    assert uploaded.status_code == 202, uploaded.text
+    scan_id = uploaded.json()["id"]
+
+    assert (await bob.get(f"/scans/{scan_id}")).status_code == 404
+    assert (await bob.get(f"/scans/{scan_id}/findings")).status_code == 404
+    assert (await bob.get(f"/projects/{project_id}/scans")).status_code == 404
+    stolen = await bob.post(
+        f"/projects/{project_id}/scans",
+        files={"file": ("code.zip", archive.read_bytes(), "application/zip")},
+    )
+    assert stolen.status_code == 404

@@ -1,8 +1,8 @@
 # Panoptes
 
-AI-assisted code vulnerability scanner. Phase 1 adds registration, login, and
-projects that belong to the logged-in user. Scanning and explanations come in
-later phases.
+AI-assisted code vulnerability scanner. You can register, create a project, and
+upload a zip. Panoptes runs Bandit on the code and lists the findings.
+Explanations come in a later phase.
 
 ## Run
 
@@ -21,6 +21,16 @@ explanations are added, pull it with:
 ```bash
 docker compose exec ollama ollama pull qwen2.5-coder:7b
 ```
+
+## Fingerprinting
+
+A finding's identity is `sha256(relative path + rule id + snippet + occurrence)`.
+The line number is not included, so adding an import does not make every finding
+look new. The snippet has its whitespace removed, so reformatting does not
+either. `occurrence` is the Nth identical snippet in that file (the first is 0).
+Without it, two copies of the same line would share one fingerprint and one
+would be dropped. Order is by line, so the index stays stable when the file
+shifts.
 
 ## Layout
 

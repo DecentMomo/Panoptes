@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
@@ -126,9 +126,7 @@ export function ProjectsPage() {
         <Card>
           <CardHeader>
             <CardTitle>No projects yet</CardTitle>
-            <CardDescription>
-              Create a project, then upload code to scan it. Scanning arrives in the next phase.
-            </CardDescription>
+            <CardDescription>Create a project, then upload a zip of source code to scan it.</CardDescription>
           </CardHeader>
         </Card>
       ) : (
@@ -136,13 +134,21 @@ export function ProjectsPage() {
           {projects.data.map((project) => (
             <Card key={project.id}>
               <CardHeader>
-                <CardTitle>{project.name}</CardTitle>
+                <CardTitle>
+                  <Link className="underline underline-offset-4" to={`/projects/${project.id}`}>
+                    {project.name}
+                  </Link>
+                </CardTitle>
                 <CardDescription>
                   {project.description?.trim() ? project.description : "No description"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground">No scans yet</span>
+                <span className="text-sm text-muted-foreground">
+                  {project.latest_scan_status
+                    ? `Last scan: ${project.latest_scan_status}`
+                    : "No scans yet"}
+                </span>
                 <Button variant="destructive" onClick={() => setDeleteTarget(project)}>
                   Delete
                 </Button>

@@ -1,5 +1,7 @@
 import os
 
+os.environ["PANOPTES_SKIP_STARTUP"] = "1"
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
@@ -54,8 +56,11 @@ def _override_get_db():
 
 
 @pytest.fixture
-async def clients():
+async def clients(monkeypatch):
     """Fresh tables per test, and a way to open extra clients (for BOLA)."""
+    # The request schedules a background scan against the app database. Tests
+    # call run_scan themselves, against the test database.
+    monkeypatch.setattr("app.api.scans.run_scan", lambda scan_id: None)
     _ensure_test_database()
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
@@ -79,6 +84,13 @@ async def clients():
 @pytest.fixture
 async def client(clients):
     return clients()
+
+
+@pytest.fixture
+def session_factory(client):
+    """Same database the API writes to, for the scan task the request does not run."""
+    _ensure_test_database()
+    return _SessionLocal
 
 
 async def register_and_login(client: AsyncClient, email: str, password: str = "password123"):

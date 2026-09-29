@@ -31,7 +31,12 @@ async function errorMessage(response: Response): Promise<string> {
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers)
   const method = (options.method ?? "GET").toUpperCase()
-  if (options.body !== undefined && !headers.has("Content-Type")) {
+  // FormData must set its own Content-Type so the browser can add the boundary.
+  if (
+    options.body !== undefined &&
+    !(options.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json")
   }
   if (UNSAFE_METHODS.has(method)) {

@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, verify_csrf
 from app.db.session import get_db
 from app.models.project import Project
+from app.models.scan import Scan
 from app.models.user import User
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectListOut, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -21,16 +22,27 @@ def get_owned_project(db: Session, user: User, project_id: int) -> Project:
     return project
 
 
-@router.get("", response_model=list[ProjectOut])
+@router.get("", response_model=list[ProjectListOut])
 def list_projects(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[Project]:
-    return list(
+) -> list[ProjectListOut]:
+    projects = list(
         db.scalars(
             select(Project).where(Project.owner_id == user.id).order_by(Project.created_at.desc())
         )
     )
+    items: list[ProjectListOut] = []
+    for project in projects:
+        latest = db.scalar(
+            select(Scan.status)
+            .where(Scan.project_id == project.id)
+            .order_by(Scan.created_at.desc())
+        )
+        item = ProjectListOut.model_validate(project)
+        item.latest_scan_status = latest
+        items.append(item)
+    return items
 
 
 @router.post(

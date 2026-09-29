@@ -37,6 +37,8 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
+      # Integration tests zip this tree. It is not part of the backend image.
+      - ./samples:/app/samples:ro
     ports:
       - "8000:8000"
     depends_on:

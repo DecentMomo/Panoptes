@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5-coder:7b"
     # Accepts a JSON list (as in .env.example) or a single origin string.
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Empty means the system temp directory. Uploaded code is deleted after the scan.
+    scan_workdir: str = ""
+    max_upload_bytes: int = 20 * 1024 * 1024
+    max_uncompressed_bytes: int = 100 * 1024 * 1024
+    max_file_count: int = 5000
+    bandit_timeout_seconds: int = 120
+    snippet_context_lines: int = 7
+    scan_rate_limit: int = 5
+    scan_rate_window_seconds: int = 60
 
     @field_validator("cors_origins", mode="before")
     @classmethod

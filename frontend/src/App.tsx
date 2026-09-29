@@ -2,8 +2,10 @@ import { Route, Routes } from "react-router-dom"
 
 import { RequireAuth } from "@/components/RequireAuth"
 import { LoginPage } from "@/pages/LoginPage"
+import { ProjectDetailPage } from "@/pages/ProjectDetailPage"
 import { ProjectsPage } from "@/pages/ProjectsPage"
 import { RegisterPage } from "@/pages/RegisterPage"
+import { ScanPage } from "@/pages/ScanPage"
 
 export default function App() {
   return (
@@ -12,6 +14,8 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/" element={<ProjectsPage />} />
+        <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/scans/:scanId" element={<ScanPage />} />
       </Route>
     </Routes>
   )

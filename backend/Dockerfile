@@ -11,8 +11,8 @@ COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 
-# Dev extras are installed so `pytest` and `ruff` work inside the container
-# during local verification. Scanner binaries are added in later phases.
+# Dev extras are installed so `pytest` and `ruff` work inside the container.
+# Bandit is a Python package. Semgrep and Gitleaks are added in a later phase.
 RUN pip install --no-cache-dir ".[dev]" \
     && rm -rf build *.egg-info \
     && useradd --create-home --uid 1000 panoptes \

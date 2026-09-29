@@ -1,0 +1,1 @@
+This text file is allowed in an upload. Bandit ignores it.

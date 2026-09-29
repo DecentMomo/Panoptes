@@ -39,3 +39,7 @@ class ProjectOut(BaseModel):
     name: str
     description: str | None
     created_at: datetime
+
+
+class ProjectListOut(ProjectOut):
+    latest_scan_status: str | None = None
