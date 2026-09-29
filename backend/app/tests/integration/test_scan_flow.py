@@ -5,6 +5,7 @@ from app.scanners.base import ToolResult
 from app.services.scan_orchestrator import run_scan
 from app.tests.conftest import register_and_login
 
+
 def _sample_dir() -> Path:
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "samples" / "vulnerable-python"
