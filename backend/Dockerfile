@@ -21,13 +21,17 @@ RUN curl -fsSL -o /tmp/gitleaks.tar.gz \
 
 # Semgrep's dependencies clash with FastAPI's, so it lives in its own venv.
 ARG SEMGREP_VERSION=1.178.0
+ARG SEMGREP_SECURITY_AUDIT_SHA256=b109a039df712f30c6d3e25e1e8358053fd0f1c91b92d0e8d2871cd141fe602f
+ARG SEMGREP_OWASP_TOP_TEN_SHA256=69d82aea19b412bd6155ea528ffbd272177e4a7f6689014d2a4e6e662d347b56
 RUN python -m venv /opt/semgrep \
     && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
     && ln -s /opt/semgrep/bin/semgrep /usr/local/bin/semgrep \
     && mkdir -p /opt/semgrep-rules \
     && curl -fsSL -o /opt/semgrep-rules/security-audit.yml https://semgrep.dev/c/p/security-audit \
     && curl -fsSL -o /opt/semgrep-rules/owasp-top-ten.yml https://semgrep.dev/c/p/owasp-top-ten \
-    && cd /opt/semgrep-rules && sha256sum ./*.yml > SHA256SUMS \
+    && echo "${SEMGREP_SECURITY_AUDIT_SHA256}  /opt/semgrep-rules/security-audit.yml" > /opt/semgrep-rules/SHA256SUMS \
+    && echo "${SEMGREP_OWASP_TOP_TEN_SHA256}  /opt/semgrep-rules/owasp-top-ten.yml" >> /opt/semgrep-rules/SHA256SUMS \
+    && sha256sum -c /opt/semgrep-rules/SHA256SUMS \
     && chmod -R a+rX /opt/semgrep /opt/semgrep-rules
 
 COPY pyproject.toml ./

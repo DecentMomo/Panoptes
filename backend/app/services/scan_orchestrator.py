@@ -124,14 +124,35 @@ def _execute(db: Session, scan: Scan, directory: Path) -> None:
 
     scan.files_scanned = files_scanned
     scan.files_skipped = files_skipped
-    findings, succeeded = _run_scanners(db, scan, extracted_root, directory)
+    findings, succeeded, duplicates_dropped = _run_scanners(db, scan, extracted_root, directory)
     if succeeded == 0:
         _fail(db, scan, SCAN_FAILED)
         return
 
-    _prepare(extracted_root, findings)
-    for finding in findings:
-        db.add(_to_row(scan.id, finding))
+    raw = len(findings) + duplicates_dropped
+    merges = _prepare(extracted_root, findings)
+    rows = [_to_row(scan.id, finding) for finding in findings]
+    stored = len(rows)
+    logger.info(
+        "scan %s findings raw=%d duplicates=%d merged=%d stored=%d",
+        scan.id,
+        raw,
+        duplicates_dropped,
+        merges,
+        stored,
+    )
+    if stored != raw - duplicates_dropped - merges:
+        logger.error(
+            "scan %s finding count mismatch raw=%d duplicates=%d merged=%d stored=%d",
+            scan.id,
+            raw,
+            duplicates_dropped,
+            merges,
+            stored,
+        )
+        raise RuntimeError(f"scan {scan.id} lost findings before storing them")
+    for row in rows:
+        db.add(row)
     scan.status = "completed" if succeeded == len(_scanners()) else "partial"
     scan.finished_at = datetime.now(UTC)
     db.commit()
@@ -156,9 +177,10 @@ def _ingest(
 
 def _run_scanners(
     db: Session, scan: Scan, root: Path, workdir: Path
-) -> tuple[list[RawFinding], int]:
+) -> tuple[list[RawFinding], int, int]:
     collected: list[RawFinding] = []
     succeeded = 0
+    duplicates_dropped = 0
     for name, runner, tool_version in _scanners():
         result, findings = runner(root, workdir)
         row = ScannerRun(
@@ -174,11 +196,12 @@ def _run_scanners(
         if status == "completed":
             row.finding_count = len(findings)
             collected.extend(findings)
+            duplicates_dropped += result.duplicates_dropped
             succeeded += 1
         else:
             logger.error("scan %s %s %s", scan.id, name, message)
         db.add(row)
-    return collected, succeeded
+    return collected, succeeded, duplicates_dropped
 
 
 def _scanner_status(
@@ -192,7 +215,7 @@ def _scanner_status(
     return "completed", None
 
 
-def _prepare(root: Path, findings: list[RawFinding]) -> None:
+def _prepare(root: Path, findings: list[RawFinding]) -> int:
     _attach_snippets(root, findings)
     apply_redaction(findings)
     for finding in findings:
@@ -200,10 +223,11 @@ def _prepare(root: Path, findings: list[RawFinding]) -> None:
         finding.owasp_category = owasp_for(finding.cwe_id)
         if not finding.source_tools:
             finding.source_tools = [finding.source_tool]
-    merged = dedupe(findings)
+    merged, merges = dedupe(findings)
     findings.clear()
     findings.extend(merged)
     assign_fingerprints(findings)
+    return merges
 
 
 def _attach_snippets(root: Path, findings: list[RawFinding]) -> None:

@@ -34,6 +34,7 @@ class ToolResult:
     exit_code: int
     duration_ms: int
     timed_out: bool
+    duplicates_dropped: int = 0
 
 
 def run_tool(args: list[str], timeout: int, env: dict[str, str] | None = None) -> ToolResult:

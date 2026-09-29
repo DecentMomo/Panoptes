@@ -1,10 +1,11 @@
+import logging
 import shutil
 import zipfile
 from pathlib import Path
 
 import pytest
 
-from app.scanners.base import ToolResult
+from app.scanners.base import RawFinding, ToolResult
 from app.tests.conftest import register_and_login
 
 
@@ -160,6 +161,87 @@ async def test_git_url_with_userinfo_is_rejected(client) -> None:
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "That repository URL is not allowed."
+
+
+def _raw(tool: str, rule: str) -> RawFinding:
+    return RawFinding(
+        rule_id=rule,
+        title=rule,
+        description=tool,
+        severity="medium",
+        confidence="low",
+        file_path="pkg/command.py",
+        line_start=4,
+        line_end=4,
+        cwe_id="CWE-78",
+        source_tool=tool,
+        flagged_snippet="call()",
+    )
+
+
+async def test_finding_arithmetic_is_logged_and_nothing_is_lost(
+    client, monkeypatch, tmp_path, caplog
+) -> None:
+    monkeypatch.setattr("app.services.scan_orchestrator.work_root", lambda: tmp_path)
+    monkeypatch.setattr("app.api.scans.scan_directory", lambda scan_id: tmp_path / str(scan_id))
+
+    def bandit_two(root, workdir):
+        return ToolResult("", "", 0, 1, False), [_raw("bandit", "B404"), _raw("bandit", "B602")]
+
+    def semgrep_with_duplicate(root, workdir):
+        return ToolResult("", "", 0, 1, False, duplicates_dropped=1), [_raw("semgrep", "sg-rule")]
+
+    monkeypatch.setattr("app.services.scan_orchestrator.run_bandit", bandit_two)
+    monkeypatch.setattr("app.services.scan_orchestrator.run_semgrep", semgrep_with_duplicate)
+    monkeypatch.setattr("app.services.scan_orchestrator.run_gitleaks", _empty)
+
+    await register_and_login(client, "ada@example.com")
+    created = await client.post("/projects", json={"name": "Sample"})
+    archive = tmp_path / "sample.zip"
+    _sample_zip(archive)
+    with caplog.at_level(logging.INFO, logger="panoptes"):
+        response = await client.post(
+            f"/projects/{created.json()['id']}/scans",
+            files={"file": ("sample.zip", archive.read_bytes(), "application/zip")},
+        )
+    scan_id = response.json()["id"]
+    detail = (await client.get(f"/scans/{scan_id}")).json()
+    assert detail["status"] == "completed"
+    # raw 4 (2 bandit + 1 semgrep + 1 duplicate) - 1 duplicate - 1 merge = 2 stored.
+    findings = (await client.get(f"/scans/{scan_id}/findings")).json()
+    assert len(findings) == 2
+    assert sorted(len(item["source_tools"]) for item in findings) == [1, 2]
+    by_tool = {run["tool"]: run for run in detail["scanner_runs"]}
+    assert by_tool["semgrep"]["finding_count"] == 1
+    assert any(
+        "raw=4 duplicates=1 merged=1 stored=2" in record.message for record in caplog.records
+    )
+
+
+async def test_a_silent_finding_loss_fails_the_scan(client, monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("app.services.scan_orchestrator.work_root", lambda: tmp_path)
+    monkeypatch.setattr("app.api.scans.scan_directory", lambda scan_id: tmp_path / str(scan_id))
+
+    def bandit_two(root, workdir):
+        return ToolResult("", "", 0, 1, False), [_raw("bandit", "B404"), _raw("bandit", "B602")]
+
+    monkeypatch.setattr("app.services.scan_orchestrator.run_bandit", bandit_two)
+    monkeypatch.setattr("app.services.scan_orchestrator.run_semgrep", _empty)
+    monkeypatch.setattr("app.services.scan_orchestrator.run_gitleaks", _empty)
+    # A dedupe that drops a finding without counting it must not pass silently.
+    monkeypatch.setattr("app.services.scan_orchestrator.dedupe", lambda findings: (findings[1:], 0))
+
+    await register_and_login(client, "ada@example.com")
+    created = await client.post("/projects", json={"name": "Sample"})
+    archive = tmp_path / "sample.zip"
+    _sample_zip(archive)
+    response = await client.post(
+        f"/projects/{created.json()['id']}/scans",
+        files={"file": ("sample.zip", archive.read_bytes(), "application/zip")},
+    )
+    detail = (await client.get(f"/scans/{response.json()['id']}")).json()
+    assert detail["status"] == "failed"
+    assert detail["error_message"] == "Scan failed."
 
 
 @pytest.mark.skipif(

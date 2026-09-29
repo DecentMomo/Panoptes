@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -7,6 +8,8 @@ from app.core.config import settings
 from app.normalize.cwe_map import normalize_cwe
 from app.normalize.unified import map_confidence
 from app.scanners.base import RawFinding, ToolResult, relative_path, run_tool
+
+logger = logging.getLogger("panoptes")
 
 _SEVERITY = {"ERROR": "high", "WARNING": "medium", "INFO": "low"}
 _version_cache: str | None = None
@@ -77,20 +80,37 @@ def scan(root: Path, workdir: Path | None = None) -> tuple[ToolResult, list[RawF
     if result.timed_out:
         return result, []
     try:
-        findings = parse(result.stdout, root)
+        findings, duplicates_dropped = parse(result.stdout, root)
     except json.JSONDecodeError:
         if result.exit_code == 0:
             return result, []
         return ToolResult(
             result.stdout, result.stderr, result.exit_code or 1, result.duration_ms, False
         ), []
+    if duplicates_dropped:
+        logger.info("semgrep dropped %d exact duplicate results", duplicates_dropped)
     # Semgrep can exit 1 when it has findings. A parsed report is a finished scan.
-    return ToolResult(result.stdout, result.stderr, 0, result.duration_ms, False), findings
+    return ToolResult(
+        result.stdout,
+        result.stderr,
+        0,
+        result.duration_ms,
+        False,
+        duplicates_dropped,
+    ), findings
 
 
-def parse(json_text: str, root: Path) -> list[RawFinding]:
+def parse(json_text: str, root: Path) -> tuple[list[RawFinding], int]:
+    """Parse a Semgrep JSON report, dropping exact duplicates.
+
+    The two rulesets overlap, so the same rule can report the same line twice.
+    The key is the full ``check_id``: two different rules may share the last
+    segment of the id, and those are not duplicates.
+    """
     payload = json.loads(json_text or "{}")
     findings: list[RawFinding] = []
+    seen: set[tuple[str, str, int, int, int, int]] = set()
+    duplicates_dropped = 0
     for item in payload.get("results", []):
         extra = item.get("extra") or {}
         metadata = extra.get("metadata") or {}
@@ -99,6 +119,18 @@ def parse(json_text: str, root: Path) -> list[RawFinding]:
         line_start = int(start.get("line") or 1)
         line_end = int(end.get("line") or line_start)
         check_id = item.get("check_id") or "semgrep"
+        key = (
+            check_id,
+            item.get("path") or "",
+            line_start,
+            int(start.get("col") or 1),
+            line_end,
+            int(end.get("col") or 1),
+        )
+        if key in seen:
+            duplicates_dropped += 1
+            continue
+        seen.add(key)
         findings.append(
             RawFinding(
                 rule_id=check_id.split(".")[-1][:80],
@@ -113,7 +145,7 @@ def parse(json_text: str, root: Path) -> list[RawFinding]:
                 source_tool="semgrep",
             )
         )
-    return findings
+    return findings, duplicates_dropped
 
 
 def _first_cwe(value: object) -> str | None:
