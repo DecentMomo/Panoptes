@@ -16,7 +16,7 @@ dependencies = [
     "bcrypt>=4.2",
     "email-validator>=2.2",
     "python-multipart>=0.0.12",
-    "bandit>=1.8",
+    "bandit==1.9.4",
 ]
 
 [project.optional-dependencies]

@@ -14,6 +14,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models import Project, User  # noqa: F401
+from app.services.scan_runner import InlineScanRunner, get_scan_runner
 
 # 127.0.0.1 rather than localhost: on Docker Desktop for Windows, "localhost" can
 # resolve to IPv6 and hang. Compose and CI override this with their own host.
@@ -60,9 +61,7 @@ def _override_get_db():
 @pytest.fixture
 async def clients(monkeypatch):
     """Fresh tables per test, and a way to open extra clients (for BOLA)."""
-    # The request schedules a background scan against the app database. Tests
-    # call run_scan themselves, against the test database.
-    monkeypatch.setattr("app.api.scans.run_scan", lambda scan_id: None)
+    # Inline runner: the scan finishes inside the request, on the test database.
     # The limiters are process-wide. Tests reuse one IP and the same emails.
     login_ip_limiter.clear()
     login_email_limiter.clear()
@@ -71,6 +70,7 @@ async def clients(monkeypatch):
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_scan_runner] = lambda: InlineScanRunner(_SessionLocal)
 
     transport = ASGITransport(app=app)
     opened: list[AsyncClient] = []

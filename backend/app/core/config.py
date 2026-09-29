@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     max_uncompressed_bytes: int = 100 * 1024 * 1024
     max_file_count: int = 5000
     bandit_timeout_seconds: int = 120
+    semgrep_timeout_seconds: int = 300
+    gitleaks_timeout_seconds: int = 60
+    clone_timeout_seconds: int = 60
+    semgrep_rules_dir: str = "/opt/semgrep-rules"
+    # The pool size, and how many scans may sit in "queued" before new ones are refused.
+    max_concurrent_scans: int = 2
+    max_queued_scans: int = 8
     snippet_context_lines: int = 7
     scan_rate_limit: int = 5
     scan_rate_window_seconds: int = 60

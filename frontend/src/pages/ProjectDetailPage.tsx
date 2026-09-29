@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { ApiError } from "@/api/client"
-import { uploadScan, listScans } from "@/api/scans"
+import { cloneScan, uploadScan, listScans } from "@/api/scans"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Scan } from "@/types"
@@ -19,6 +19,8 @@ export function ProjectDetailPage() {
   const queryClient = useQueryClient()
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [repoUrl, setRepoUrl] = useState("")
+  const [cloning, setCloning] = useState(false)
   const scans = useQuery({
     queryKey: ["scans", id],
     queryFn: () => listScans(id),
@@ -42,6 +44,25 @@ export function ProjectDetailPage() {
       toast.error(message)
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function cloneRepository() {
+    const url = repoUrl.trim()
+    if (!url) {
+      return
+    }
+    setCloning(true)
+    try {
+      await cloneScan(id, url)
+      setRepoUrl("")
+      await queryClient.invalidateQueries({ queryKey: ["scans", id] })
+      toast.success("Scan started")
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : "Could not start the scan."
+      toast.error(message)
+    } finally {
+      setCloning(false)
     }
   }
 
@@ -101,6 +122,29 @@ export function ProjectDetailPage() {
               }}
             />
           </label>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Repository</CardTitle>
+          <CardDescription>A public https URL on github.com or gitlab.com.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex gap-2">
+          <input
+            value={repoUrl}
+            onChange={(event) => setRepoUrl(event.target.value)}
+            placeholder="https://github.com/org/repo"
+            className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+          />
+          <button
+            type="button"
+            disabled={cloning || repoUrl.trim() === ""}
+            onClick={() => void cloneRepository()}
+            className="rounded-md bg-primary px-3 text-sm text-primary-foreground disabled:opacity-50"
+          >
+            {cloning ? "Starting…" : "Scan"}
+          </button>
         </CardContent>
       </Card>
 

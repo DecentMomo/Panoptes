@@ -2,10 +2,26 @@ import { Link, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 
 import { getScan, listFindings } from "@/api/scans"
+import type { ScanDetail } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const SEVERITIES = ["critical", "high", "medium", "low", "info"]
+
+function PartialBanner({ scan }: { scan: ScanDetail }) {
+  const missed = scan.scanner_runs.filter((run) => run.status !== "completed")
+  const kept = scan.scanner_runs.filter((run) => run.status === "completed")
+  const why = missed
+    .map((run) => `${run.tool} ${run.status === "timeout" ? "timed out" : "failed"}`)
+    .join(", ")
+  const shown = kept.map((run) => run.tool).join(" and ")
+  return (
+    <p className="text-sm">
+      Partial results: {why || "a scanner did not finish"}.
+      {shown ? ` Findings from ${shown} are shown.` : ""}
+    </p>
+  )
+}
 
 export function ScanPage() {
   const { scanId } = useParams()
@@ -22,7 +38,7 @@ export function ScanPage() {
   const findings = useQuery({
     queryKey: ["findings", id],
     queryFn: () => listFindings(id),
-    enabled: scan.data?.status === "completed",
+    enabled: scan.data?.status === "completed" || scan.data?.status === "partial",
   })
 
   return (
@@ -52,6 +68,7 @@ export function ScanPage() {
               </Badge>
             ))}
           </div>
+          {scan.data.status === "partial" ? <PartialBanner scan={scan.data} /> : null}
           {scan.data.error_message ? (
             <p className="text-sm text-destructive">{scan.data.error_message}</p>
           ) : null}
@@ -63,8 +80,10 @@ export function ScanPage() {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                   {run.status}
+                  {run.tool_version ? ` · ${run.tool_version}` : ""}
                   {run.finding_count ? ` · ${run.finding_count} findings` : ""}
                   {run.duration_ms != null ? ` · ${run.duration_ms} ms` : ""}
+                  {run.error_message ? ` · ${run.error_message}` : ""}
                 </CardContent>
               </Card>
             ))}
@@ -77,6 +96,8 @@ export function ScanPage() {
                     <th className="px-3 py-2 font-medium">Severity</th>
                     <th className="px-3 py-2 font-medium">Rule</th>
                     <th className="px-3 py-2 font-medium">Location</th>
+                    <th className="px-3 py-2 font-medium">Tools</th>
+                    <th className="px-3 py-2 font-medium">OWASP</th>
                     <th className="px-3 py-2 font-medium">Title</th>
                   </tr>
                 </thead>
@@ -88,13 +109,15 @@ export function ScanPage() {
                       <td className="px-3 py-2">
                         {finding.file_path}:{finding.line_start}
                       </td>
+                      <td className="px-3 py-2">{finding.source_tools.join(", ")}</td>
+                      <td className="px-3 py-2">{finding.owasp_category ?? "—"}</td>
                       <td className="px-3 py-2">{finding.title}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : scan.data.status === "completed" ? (
+          ) : scan.data.status === "completed" || scan.data.status === "partial" ? (
             <p className="text-sm text-muted-foreground">No findings.</p>
           ) : null}
         </>

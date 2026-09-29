@@ -31,6 +31,7 @@ export type ScannerRun = {
   status: string
   duration_ms: number | null
   finding_count: number
+  tool_version: string | null
   error_message: string | null
 }
 

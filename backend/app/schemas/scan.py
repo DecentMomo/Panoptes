@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ScanOut(BaseModel):
@@ -27,12 +27,17 @@ class ScannerRunOut(BaseModel):
     status: str
     duration_ms: int | None
     finding_count: int
+    tool_version: str | None
     error_message: str | None
 
 
 class ScanDetailOut(ScanOut):
     scanner_runs: list[ScannerRunOut]
     severity_counts: dict[str, int]
+
+
+class GitScanIn(BaseModel):
+    url: str = Field(min_length=1, max_length=255)
 
 
 class FindingOut(BaseModel):

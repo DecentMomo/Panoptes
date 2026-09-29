@@ -1,32 +1,31 @@
 import json
+import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import settings
 from app.normalize.unified import map_confidence, map_severity
-from app.scanners.base import ToolResult, run_tool
+from app.scanners.base import RawFinding, ToolResult, relative_path, run_tool
+
+_version_cache: str | None = None
 
 
-@dataclass
-class RawFinding:
-    rule_id: str
-    title: str
-    description: str
-    severity: str
-    confidence: str
-    file_path: str
-    line_start: int
-    line_end: int
-    cwe_id: str | None
-    source_tool: str = "bandit"
-    flagged_snippet: str = ""
-    code_snippet: str = ""
-    snippet_start_line: int = 1
-    fingerprint: str = ""
+def version() -> str:
+    global _version_cache
+    if _version_cache:
+        return _version_cache
+    result = run_tool([sys.executable, "-m", "bandit", "--version"], timeout=15)
+    text = (result.stdout or result.stderr).strip().splitlines()
+    if result.timed_out or result.exit_code != 0 or not text:
+        return "unknown"
+    # ``python -m bandit --version`` prints ``__main__.py 1.9.4``. Keep the number.
+    match = re.search(r"\d+\.\d+(?:\.\d+)?", text[0])
+    _version_cache = f"bandit {match.group(0)}" if match else text[0][:120]
+    return _version_cache
 
 
-def scan(root: Path) -> tuple[ToolResult, list[RawFinding]]:
+def scan(root: Path, workdir: Path | None = None) -> tuple[ToolResult, list[RawFinding]]:
+    del workdir
     # --exit-zero: Bandit exits 1 when it finds issues. A nonzero code is then a real failure.
     result = run_tool(
         [
@@ -44,7 +43,10 @@ def scan(root: Path) -> tuple[ToolResult, list[RawFinding]]:
     )
     if result.timed_out or result.exit_code != 0:
         return result, []
-    return result, parse(result.stdout, root)
+    try:
+        return result, parse(result.stdout, root)
+    except json.JSONDecodeError:
+        return ToolResult(result.stdout, result.stderr, 1, result.duration_ms, False), []
 
 
 def parse(json_text: str, root: Path) -> list[RawFinding]:
@@ -63,20 +65,11 @@ def parse(json_text: str, root: Path) -> list[RawFinding]:
                 description=item.get("issue_text") or "",
                 severity=map_severity(item.get("issue_severity") or ""),
                 confidence=map_confidence(item.get("issue_confidence") or ""),
-                file_path=_relative_path(item.get("filename") or "", root),
+                file_path=relative_path(item.get("filename") or "", root),
                 line_start=line_start,
                 line_end=line_end,
                 cwe_id=cwe_id,
+                source_tool="bandit",
             )
         )
     return findings
-
-
-def _relative_path(filename: str, root: Path) -> str:
-    path = Path(filename)
-    try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
-    except (ValueError, OSError):
-        if not path.is_absolute():
-            return path.as_posix().removeprefix("./")
-        return path.name

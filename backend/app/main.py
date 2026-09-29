@@ -10,16 +10,21 @@ from app.api.projects import router as projects_router
 from app.api.scans import router as scans_router
 from app.core.config import settings
 from app.services.scan_orchestrator import mark_interrupted_scans
+from app.services.scan_runner import ThreadPoolScanRunner
 
 logger = logging.getLogger("panoptes")
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(app: FastAPI):
+    app.state.scan_runner = ThreadPoolScanRunner(settings.max_concurrent_scans)
     # Tests set this so importing the app does not touch the development database.
     if os.environ.get("PANOPTES_SKIP_STARTUP") != "1":
         mark_interrupted_scans()
-    yield
+    try:
+        yield
+    finally:
+        app.state.scan_runner.shutdown()
 
 
 def create_app() -> FastAPI:

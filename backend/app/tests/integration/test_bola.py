@@ -50,3 +50,8 @@ async def test_user_cannot_access_another_users_scan(clients, tmp_path) -> None:
         files={"file": ("code.zip", archive.read_bytes(), "application/zip")},
     )
     assert stolen.status_code == 404
+    stolen_git = await bob.post(
+        f"/projects/{project_id}/scans/git",
+        json={"url": "https://github.com/org/repo"},
+    )
+    assert stolen_git.status_code == 404

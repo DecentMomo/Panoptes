@@ -6,13 +6,36 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y git ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pinned, and checked, so a scan can be reproduced from the image.
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+RUN curl -fsSL -o /tmp/gitleaks.tar.gz \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+    && echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
+    && rm /tmp/gitleaks.tar.gz
+
+# Semgrep's dependencies clash with FastAPI's, so it lives in its own venv.
+ARG SEMGREP_VERSION=1.178.0
+RUN python -m venv /opt/semgrep \
+    && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
+    && ln -s /opt/semgrep/bin/semgrep /usr/local/bin/semgrep \
+    && mkdir -p /opt/semgrep-rules \
+    && curl -fsSL -o /opt/semgrep-rules/security-audit.yml https://semgrep.dev/c/p/security-audit \
+    && curl -fsSL -o /opt/semgrep-rules/owasp-top-ten.yml https://semgrep.dev/c/p/owasp-top-ten \
+    && cd /opt/semgrep-rules && sha256sum ./*.yml > SHA256SUMS \
+    && chmod -R a+rX /opt/semgrep /opt/semgrep-rules
+
 COPY pyproject.toml ./
 COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 
 # Dev extras are installed so `pytest` and `ruff` work inside the container.
-# Bandit is a Python package. Semgrep and Gitleaks are added in a later phase.
 RUN pip install --no-cache-dir ".[dev]" \
     && rm -rf build *.egg-info \
     && useradd --create-home --uid 1000 panoptes \

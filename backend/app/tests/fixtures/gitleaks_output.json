@@ -1,0 +1,13 @@
+[
+  {
+    "RuleID": "generic-api-key",
+    "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+    "StartLine": 2,
+    "EndLine": 2,
+    "StartColumn": 2,
+    "EndColumn": 53,
+    "Match": "api_key = \"REDACTED\"",
+    "Secret": "REDACTED",
+    "File": "secrets.py"
+  }
+]

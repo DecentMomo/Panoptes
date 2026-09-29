@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from app.scanners.bandit_runner import RawFinding
+from app.scanners.base import RawFinding
 
 
 def normalize_path(path: str) -> str:

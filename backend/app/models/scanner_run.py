@@ -13,4 +13,5 @@ class ScannerRun(Base):
     status: Mapped[str] = mapped_column(String(20))
     duration_ms: Mapped[int | None] = mapped_column(nullable=True)
     finding_count: Mapped[int] = mapped_column(default=0)
+    tool_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

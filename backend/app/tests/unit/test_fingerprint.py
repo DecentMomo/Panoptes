@@ -1,5 +1,5 @@
 from app.normalize.fingerprint import assign_fingerprints, compute_fingerprint
-from app.scanners.bandit_runner import RawFinding
+from app.scanners.base import RawFinding
 
 
 def _finding(path: str, rule: str, snippet: str, line: int) -> RawFinding:

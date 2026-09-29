@@ -11,6 +11,13 @@ export function uploadScan(projectId: number, file: File): Promise<Scan> {
   return api<Scan>(`/projects/${projectId}/scans`, { method: "POST", body })
 }
 
+export function cloneScan(projectId: number, url: string): Promise<Scan> {
+  return api<Scan>(`/projects/${projectId}/scans/git`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  })
+}
+
 export function getScan(scanId: number): Promise<ScanDetail> {
   return api<ScanDetail>(`/scans/${scanId}`)
 }

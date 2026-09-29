@@ -4,8 +4,8 @@ from collections import Counter
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.projects import get_owned_project
@@ -13,20 +13,28 @@ from app.core.config import settings
 from app.core.deps import get_current_user, verify_csrf
 from app.core.rate_limit import RateLimiter, RateLimitExceeded
 from app.db.session import get_db
+from app.ingest.git_clone import (
+    URL_NOT_ALLOWED,
+    RepoUrlError,
+    assert_public_host,
+    validate_repo_url,
+)
 from app.ingest.zip_handler import NOT_A_ZIP, UnsafeArchiveError, save_upload
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.scan import Scan
 from app.models.scanner_run import ScannerRun
 from app.models.user import User
-from app.schemas.scan import FindingOut, ScanDetailOut, ScannerRunOut, ScanOut
-from app.services.scan_orchestrator import run_scan, scan_directory
+from app.schemas.scan import FindingOut, GitScanIn, ScanDetailOut, ScannerRunOut, ScanOut
+from app.services.scan_orchestrator import scan_directory
+from app.services.scan_runner import ScanRunner, get_scan_runner
 
 logger = logging.getLogger("panoptes")
 
 router = APIRouter(tags=["scans"])
 
 scan_rate_limiter = RateLimiter(settings.scan_rate_limit, settings.scan_rate_window_seconds)
+SCANNER_BUSY = "The scanner is busy. Try again shortly."
 
 
 def enforce_scan_rate_limit(user: User = Depends(get_current_user)) -> User:
@@ -60,10 +68,10 @@ def get_owned_scan(db: Session, user: User, scan_id: int) -> Scan:
 )
 def create_scan(
     project_id: int,
-    background: BackgroundTasks,
     file: UploadFile = File(...),
     user: User = Depends(enforce_scan_rate_limit),
     db: Session = Depends(get_db),
+    runner: ScanRunner = Depends(get_scan_runner),
 ) -> Scan:
     project = get_owned_project(db, user, project_id)
     source_name = Path(file.filename or "").name
@@ -71,6 +79,7 @@ def create_scan(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a .zip archive."
         )
+    _ensure_capacity(db)
 
     scan = Scan(
         project_id=project.id,
@@ -104,7 +113,46 @@ def create_scan(
         ) from None
 
     db.commit()
-    background.add_task(run_scan, scan.id)
+    runner.submit(scan.id)
+    db.refresh(scan)
+    return scan
+
+
+@router.post(
+    "/projects/{project_id}/scans/git",
+    response_model=ScanOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(verify_csrf)],
+)
+def create_git_scan(
+    project_id: int,
+    body: GitScanIn,
+    user: User = Depends(enforce_scan_rate_limit),
+    db: Session = Depends(get_db),
+    runner: ScanRunner = Depends(get_scan_runner),
+) -> Scan:
+    project = get_owned_project(db, user, project_id)
+    try:
+        url, host = validate_repo_url(body.url)
+        assert_public_host(host)
+    except RepoUrlError as exc:
+        logger.warning("rejected git url for project %s: %s", project.id, exc.detail)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=URL_NOT_ALLOWED
+        ) from None
+    _ensure_capacity(db)
+    scan = Scan(
+        project_id=project.id,
+        status="queued",
+        source_type="git",
+        source_name=url,
+        files_scanned=0,
+        files_skipped=0,
+    )
+    db.add(scan)
+    db.commit()
+    runner.submit(scan.id)
+    db.refresh(scan)
     return scan
 
 
@@ -129,7 +177,9 @@ def get_scan(
     db: Session = Depends(get_db),
 ) -> ScanDetailOut:
     scan = get_owned_scan(db, user, scan_id)
-    runs = list(db.scalars(select(ScannerRun).where(ScannerRun.scan_id == scan.id)))
+    runs = list(
+        db.scalars(select(ScannerRun).where(ScannerRun.scan_id == scan.id).order_by(ScannerRun.id))
+    )
     severities = db.scalars(select(Finding.severity).where(Finding.scan_id == scan.id))
     return ScanDetailOut(
         **ScanOut.model_validate(scan).model_dump(),
@@ -152,6 +202,13 @@ def list_findings(
             .order_by(Finding.file_path, Finding.line_start)
         )
     )
+
+
+def _ensure_capacity(db: Session) -> None:
+    """Count queued rows. Two requests can both pass this and exceed the cap by one."""
+    queued = db.scalar(select(func.count()).select_from(Scan).where(Scan.status == "queued")) or 0
+    if queued >= settings.max_queued_scans:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=SCANNER_BUSY)
 
 
 def _require_zip(path: Path) -> None:

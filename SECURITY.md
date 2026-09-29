@@ -20,7 +20,7 @@ addresses each one. Later phases add the sections for git cloning and the LLM.
 | Threat | Control |
 | --- | --- |
 | Zip Slip (paths with `..` or an absolute path) | Member names are rejected before anything is written. After the destination path is joined, `assert_within` resolves it and refuses it unless it is still inside the scan directory. The same check runs before a snippet is read back. |
-| Zip symlink escape | A zip entry whose Unix mode is a symlink is rejected. `assert_within` also follows symlinks on disk, so a link that points outside the scan directory fails. |
+| Zip symlink escape | A zip entry whose Unix mode is a symlink is rejected. After a git clone, the tree is walked with `lstat` and any symlink fails the scan the same way. `assert_within` also follows symlinks on disk, so a link that points outside the scan directory fails before a snippet is read. |
 | Zip bomb | The declared uncompressed size is checked first. Each member is then streamed to disk in 64 KB chunks while the real bytes are counted, and the partial file is deleted if the running total passes the cap (default 100 MB uncompressed, 20 MB upload, 5,000 files). The cap is a disk cap: one chunk is in memory at a time, not a second copy of the member. Headers are not trusted on their own. |
 | Uploading something other than source | Extensions outside the allowlist are skipped. They do not fail the scan. The allowlist is deliberately wide: `.py`/`.js` and friends, `.md`, shell scripts, `.pem`/`.key`/`.crt`, Terraform `.tfvars`, any `.env*` name (so `.env.local` and `.env.production` are kept), and extensionless `Dockerfile` and `Makefile`. A scanner cannot flag a secret in a file that was never extracted, and a clean result for that reason would be worse than skipping the scanner. Traversal is not skipped: it rejects the whole archive. |
 | A scanner or a snippet reading outside the scan directory | `assert_within` is the check, and the temp directory is deleted in a `finally` block after the scan. |
@@ -30,13 +30,31 @@ addresses each one. Later phases add the sections for git cloning and the LLM.
 | Threat | Control |
 | --- | --- |
 | Command injection | Scanners are started with a list of arguments and `shell=False`. `run_tool` refuses a string. The path it receives is the scan directory the server created, not a string from the upload name. |
-| A scanner that hangs | `subprocess.run` has a timeout (default 120 seconds). A timeout is stored on that scanner's row and the scan is marked failed with a generic message. Bandit is run with `--exit-zero`, so a nonzero exit means the tool failed, not that it found issues. |
+| A scanner that hangs | `subprocess.run` has a per-tool timeout (Bandit 120s, Semgrep 300s, Gitleaks 60s, git clone 60s). A timeout or a failure is stored on that scanner's row. The scan is `partial` if at least one tool finished, and `failed` only if none did. Bandit is run with `--exit-zero`, so a nonzero exit means the tool failed, not that it found issues. |
+| Semgrep phoning home | Semgrep is run with `--metrics=off` and `--disable-version-check`, and `SEMGREP_SEND_METRICS=off`. The `p/security-audit` and `p/owasp-top-ten` rules are downloaded when the image is built and read from `/opt/semgrep-rules`. A scan does not contact the Semgrep registry. |
+| A secret landing in the database or a log | Gitleaks runs as `gitleaks dir` with `--redact`. The stored snippet is that redacted match, truncated to 120 characters, and the report file is deleted after it is parsed. If the match is not redacted, it is replaced with `REDACTED` and not stored. Any other tool's snippet that covers the same line is masked on that span. Scanner stdout is not written to the log. |
+
+## Git clone
+
+| Threat | Control |
+| --- | --- |
+| Cloning an unexpected host | `urlsplit` must see scheme `https` and a netloc that is exactly `github.com` or `gitlab.com`. That single comparison rejects userinfo (`https://evil@github.com`, `https://github.com@evil.com`), a lookalike host, a port, and a trailing dot. The path allows `owner/repo` plus up to two GitLab subgroup levels, and rejects `.`, `..`, `%`, and backslashes. |
+| SSRF to a private address | The hostname is resolved with `getaddrinfo` and every address must be a public unicast address, for IPv4 and IPv6. Mapped IPv4 (`::ffff:127.0.0.1`) is unwrapped and checked as IPv4. The check runs again in the worker immediately before `git` starts. |
+| Git features that escape the clone | The clone is `git -c protocol.allow=never -c protocol.https.allow=always -c http.followRedirects=false -c core.symlinks=false -c core.hooksPath=/dev/null -c credential.helper= clone --depth 1 --no-recurse-submodules --single-branch -- <url> <dest>`. The environment is only `PATH`, a scan-local `HOME`, `GIT_TERMINAL_PROMPT=0`, `GIT_CONFIG_NOSYSTEM=1`, and `GIT_CONFIG_GLOBAL=/dev/null`. `--` stops the URL being read as an option. |
+| A cloned tree that is too big, or a symlink a scanner would follow | `.git` is deleted so history and pack files are not scanned. The same file-count and uncompressed-size caps as zip extraction are applied, and files outside the allowlist are removed. A symlink fails the scan. |
+
+What this does not do:
+
+- Git resolves the hostname again itself. With the host restricted to github.com and gitlab.com, reaching a private address that way requires a resolver that lies about one of those two names. That residual DNS-rebinding risk is small, and it is real.
+- The size cap is applied after the clone. During the clone, only the 60 second timeout bounds how much is downloaded.
+- `http.followRedirects=false` means a renamed repository fails instead of being followed. That is intentional: a redirect would be a host we did not check.
 
 ## Rate limiting
 
 | Threat | Control |
 | --- | --- |
 | Scan-creation flood | An in-memory sliding window allows 5 scan creations per user per minute, then returns 429. It is per process and resets on restart, which matches a single uvicorn worker. |
+| Too many scans at once | At most 2 scans run, on a `ThreadPoolExecutor` that is separate from the API's worker threads. If 8 scans are already `queued`, a new one is refused with 429. The count is a database count, so it survives a restart. Two requests can both pass the check and exceed the cap by one. |
 | Password guessing | Login is limited twice: 10 attempts per minute per client IP, and 20 per minute per submitted email. Either bucket returning full is a 429 with the same message. The IP limit is the tighter one so a single host is blocked before it can use up a known account's email bucket and lock the real owner out. The email bucket is what stops the same account being sprayed from many addresses. |
 
 ## Known limitations
