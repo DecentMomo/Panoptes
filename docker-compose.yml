@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-panoptes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-panoptes}
+      POSTGRES_DB: ${POSTGRES_DB:-panoptes}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-panoptes} -d ${POSTGRES_DB:-panoptes}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Compose-level values win over env_file so the service hostname stays
+      # correct even if a host-oriented DATABASE_URL is set in .env.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-panoptes}:${POSTGRES_PASSWORD:-panoptes}@db:5432/${POSTGRES_DB:-panoptes}
+      OLLAMA_BASE_URL: http://ollama:11434
+      # Docker Desktop on Windows does not forward filesystem events into
+      # containers, so uvicorn's reloader has to poll.
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Keep the image's node_modules; the bind mount above would hide them.
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  pgdata:
+  ollama:
