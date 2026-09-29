@@ -10,3 +10,7 @@ def test_limit_is_enforced_inside_the_window() -> None:
     with pytest.raises(RateLimitExceeded):
         limiter.check(1)
     limiter.check(2)
+    limiter.check("ada@example.com")
+    limiter.check("ada@example.com")
+    with pytest.raises(RateLimitExceeded):
+        limiter.check("ada@example.com")

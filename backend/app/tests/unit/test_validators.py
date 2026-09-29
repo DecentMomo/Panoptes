@@ -22,8 +22,16 @@ def test_safe_and_unsafe_member_names() -> None:
 def test_extension_allowlist() -> None:
     assert is_allowed_extension("src/app.py")
     assert is_allowed_extension(".env")
+    assert is_allowed_extension("config/.env.local")
+    assert is_allowed_extension(".env.production")
+    assert is_allowed_extension("keys/id_rsa.pem")
+    assert is_allowed_extension("deploy/app.key")
+    assert is_allowed_extension("Dockerfile")
+    assert is_allowed_extension("services/Makefile")
+    assert is_allowed_extension("README.md")
+    assert is_allowed_extension("notes/infra.tfvars")
     assert not is_allowed_extension("photo.png")
-    assert not is_allowed_extension("README.md")
+    assert not is_allowed_extension("Dockerfile.prod")
 
 
 def test_assert_within_rejects_parent_segments(tmp_path) -> None:

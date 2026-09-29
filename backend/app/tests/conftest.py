@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.api.auth import login_email_limiter, login_ip_limiter
+from app.api.scans import scan_rate_limiter
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -61,6 +63,10 @@ async def clients(monkeypatch):
     # The request schedules a background scan against the app database. Tests
     # call run_scan themselves, against the test database.
     monkeypatch.setattr("app.api.scans.run_scan", lambda scan_id: None)
+    # The limiters are process-wide. Tests reuse one IP and the same emails.
+    login_ip_limiter.clear()
+    login_email_limiter.clear()
+    scan_rate_limiter.clear()
     _ensure_test_database()
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)

@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
@@ -49,10 +52,45 @@ def create_access_token(user_id: int) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=_ALGORITHM)
 
 
-def decode_access_token(token: str) -> int | None:
+def decode_access_token(token: str, *, verify_exp: bool = True) -> int | None:
     try:
         # The algorithm allowlist is what rejects `alg: none` and algorithm-confusion tokens.
-        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[_ALGORITHM],
+            options={"verify_exp": verify_exp},
+        )
         return int(payload["sub"])
     except (jwt.PyJWTError, KeyError, TypeError, ValueError):
         return None
+
+
+def create_csrf_token(user_id: int) -> str:
+    """Signed double-submit value: a nonce plus an HMAC bound to the user id.
+
+    A matching cookie and header is not enough. The MAC has to be ours, for
+    this user, so an attacker who can write cookies still cannot forge a token
+    for someone else's session.
+    """
+    nonce = secrets.token_urlsafe(32)
+    mac = _csrf_mac(user_id, nonce)
+    return f"{nonce}.{mac}"
+
+
+def csrf_token_matches(token: str, user_id: int) -> bool:
+    nonce, separator, mac = token.rpartition(".")
+    if not separator or not nonce or not mac:
+        return False
+    expected = _csrf_mac(user_id, nonce)
+    if len(mac) != len(expected):
+        return False
+    return hmac.compare_digest(mac, expected)
+
+
+def _csrf_mac(user_id: int, nonce: str) -> str:
+    return hmac.new(
+        settings.secret_key.encode(),
+        f"{user_id}.{nonce}".encode(),
+        hashlib.sha256,
+    ).hexdigest()

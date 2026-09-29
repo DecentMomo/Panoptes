@@ -17,10 +17,10 @@ class RateLimiter:
     def __init__(self, limit: int, window_seconds: int) -> None:
         self.limit = limit
         self.window_seconds = window_seconds
-        self._hits: dict[int, list[float]] = defaultdict(list)
+        self._hits: dict[int | str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
 
-    def check(self, key: int) -> None:
+    def check(self, key: int | str) -> None:
         now = time.monotonic()
         with self._lock:
             recent = [hit for hit in self._hits[key] if now - hit < self.window_seconds]
@@ -29,3 +29,7 @@ class RateLimiter:
                 raise RateLimitExceeded
             recent.append(now)
             self._hits[key] = recent
+
+    def clear(self) -> None:
+        with self._lock:
+            self._hits.clear()

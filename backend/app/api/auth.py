@@ -1,16 +1,16 @@
-import secrets
-
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_user_by_email, verify_csrf
+from app.core.rate_limit import RateLimiter, RateLimitExceeded
 from app.core.security import (
     ACCESS_TOKEN_COOKIE,
     CSRF_TOKEN_COOKIE,
     PasswordTooLongError,
     create_access_token,
+    create_csrf_token,
     dummy_password_hash,
     hash_password,
     verify_password,
@@ -22,6 +22,12 @@ from app.schemas.auth import LoginIn, RegisterIn, UserOut
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _INVALID_LOGIN = "Invalid email or password"
+_TOO_MANY_LOGINS = "Too many login attempts. Try again in a minute."
+
+login_ip_limiter = RateLimiter(settings.login_rate_limit_ip, settings.login_rate_window_seconds)
+login_email_limiter = RateLimiter(
+    settings.login_rate_limit_email, settings.login_rate_window_seconds
+)
 
 
 def _cookie_max_age() -> int:
@@ -41,7 +47,7 @@ def set_auth_cookies(response: Response, user_id: int) -> None:
     # Readable by JavaScript on purpose: the page copies it into X-CSRF-Token.
     response.set_cookie(
         CSRF_TOKEN_COOKIE,
-        secrets.token_urlsafe(32),
+        create_csrf_token(user_id),
         httponly=False,
         secure=settings.cookie_secure,
         samesite="lax",
@@ -78,8 +84,25 @@ def register(body: RegisterIn, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def client_ip(request: Request) -> str:
+    """The address the app actually sees. A proxy's forwarded header is not trusted."""
+    if request.client is None:
+        return "unknown"
+    return request.client.host
+
+
 @router.post("/login", response_model=UserOut)
-def login(body: LoginIn, response: Response, db: Session = Depends(get_db)) -> User:
+def login(
+    body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)
+) -> User:
+    try:
+        login_ip_limiter.check(client_ip(request))
+        login_email_limiter.check(body.email.lower())
+    except RateLimitExceeded:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_TOO_MANY_LOGINS
+        ) from None
+
     user = get_user_by_email(db, body.email.lower())
     # Always run a bcrypt check. Skipping it for unknown emails would let an
     # attacker tell "no such user" from "wrong password" by response time.
@@ -91,7 +114,10 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)) -> U
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
-def logout(response: Response, _: User = Depends(get_current_user)) -> None:
+def logout(response: Response) -> None:
+    # No auth dependency: an expired access token must still be able to clear
+    # the cookies. The CSRF check above is what keeps a cross-site page from
+    # logging the user out.
     clear_auth_cookies(response)
 
 

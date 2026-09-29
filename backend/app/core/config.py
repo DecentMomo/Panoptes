@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     snippet_context_lines: int = 7
     scan_rate_limit: int = 5
     scan_rate_window_seconds: int = 60
+    # The IP bucket is tighter on purpose: one host is blocked before it can
+    # exhaust a victim's email bucket and lock them out.
+    login_rate_limit_ip: int = 10
+    login_rate_limit_email: int = 20
+    login_rate_window_seconds: int = 60
 
     @field_validator("cors_origins", mode="before")
     @classmethod

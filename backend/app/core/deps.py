@@ -8,6 +8,7 @@ from app.core.security import (
     ACCESS_TOKEN_COOKIE,
     CSRF_HEADER,
     CSRF_TOKEN_COOKIE,
+    csrf_token_matches,
     decode_access_token,
 )
 from app.db.session import get_db
@@ -30,14 +31,23 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 
 
 def verify_csrf(request: Request) -> None:
-    """Double-submit check: the header must match the csrf cookie.
+    """Signed double-submit: header matches cookie, and the cookie is our MAC.
 
     A cross-site request can make the browser send our cookies, but it cannot
-    read them, so it cannot copy the cookie value into this header.
+    read them, so it cannot copy the cookie value into this header. The MAC
+    binds that value to the user id inside the access token, so planting both
+    cookies is not enough unless the attacker can sign with the server key.
+
+    Expiry is not checked here. Logout has to clear cookies after the access
+    token has expired, and the signature is what this check is for.
     """
     cookie = request.cookies.get(CSRF_TOKEN_COOKIE, "")
     header = request.headers.get(CSRF_HEADER, "")
     if not cookie or not header or not _same_secret(cookie, header):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF check failed")
+    access = request.cookies.get(ACCESS_TOKEN_COOKIE)
+    user_id = decode_access_token(access, verify_exp=False) if access else None
+    if user_id is None or not csrf_token_matches(cookie, user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF check failed")
 
 

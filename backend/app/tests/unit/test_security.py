@@ -7,6 +7,8 @@ from app.core.config import settings
 from app.core.security import (
     PasswordTooLongError,
     create_access_token,
+    create_csrf_token,
+    csrf_token_matches,
     decode_access_token,
     hash_password,
     verify_password,
@@ -40,6 +42,14 @@ def test_expired_token_is_rejected() -> None:
         algorithm="HS256",
     )
     assert decode_access_token(token) is None
+    assert decode_access_token(token, verify_exp=False) == 1
+
+
+def test_csrf_token_is_bound_to_the_user() -> None:
+    token = create_csrf_token(4)
+    assert csrf_token_matches(token, 4)
+    assert not csrf_token_matches(token, 5)
+    assert not csrf_token_matches("not-a-real-token.deadbeef", 4)
 
 
 def test_alg_none_token_is_rejected() -> None:

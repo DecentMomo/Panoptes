@@ -1,3 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
+import jwt
+
+from app.core.config import settings
+from app.core.rate_limit import RateLimiter
 from app.tests.conftest import register_and_login
 
 
@@ -62,3 +68,65 @@ async def test_logout_clears_the_session(client) -> None:
     logged_out = await client.post("/auth/logout")
     assert logged_out.status_code == 204
     assert (await client.get("/auth/me")).status_code == 401
+
+
+async def test_logout_succeeds_with_an_expired_access_token(client) -> None:
+    await register_and_login(client, "ada@example.com")
+    user_id = (await client.get("/auth/me")).json()["id"]
+    expired = jwt.encode(
+        {"sub": str(user_id), "exp": datetime.now(UTC) - timedelta(minutes=5)},
+        settings.secret_key,
+        algorithm="HS256",
+    )
+    client.cookies.set("access_token", expired)
+    logged_out = await client.post("/auth/logout")
+    assert logged_out.status_code == 204
+    cleared = " ".join(logged_out.headers.get_list("set-cookie")).lower()
+    assert "access_token=" in cleared
+    assert "csrf_token=" in cleared
+    assert (await client.get("/auth/me")).status_code == 401
+
+
+async def test_forged_csrf_pair_is_rejected(client) -> None:
+    await register_and_login(client, "ada@example.com")
+    forged = "not-a-real-token.deadbeef"
+    client.cookies.set("csrf_token", forged)
+    client.headers["X-CSRF-Token"] = forged
+    response = await client.post("/projects", json={"name": "Nope"})
+    assert response.status_code == 403
+
+
+def _quiet_limiters(monkeypatch, ip_limit: int, email_limit: int) -> None:
+    monkeypatch.setattr("app.api.auth.login_ip_limiter", RateLimiter(ip_limit, 60))
+    monkeypatch.setattr("app.api.auth.login_email_limiter", RateLimiter(email_limit, 60))
+
+
+async def test_one_ip_is_limited_before_it_locks_the_account(client, monkeypatch) -> None:
+    _quiet_limiters(monkeypatch, ip_limit=2, email_limit=20)
+    addresses = iter(["attacker", "attacker", "attacker", "owner"])
+    monkeypatch.setattr("app.api.auth.client_ip", lambda request: next(addresses))
+    await client.post(
+        "/auth/register", json={"email": "ada@example.com", "password": "password123"}
+    )
+    payload = {"email": "ada@example.com", "password": "not-the-password"}
+    assert (await client.post("/auth/login", json=payload)).status_code == 401
+    assert (await client.post("/auth/login", json=payload)).status_code == 401
+    blocked = await client.post("/auth/login", json=payload)
+    assert blocked.status_code == 429
+    owner = await client.post(
+        "/auth/login", json={"email": "ada@example.com", "password": "password123"}
+    )
+    assert owner.status_code == 200
+
+
+async def test_email_bucket_stops_a_distributed_login_spray(client, monkeypatch) -> None:
+    _quiet_limiters(monkeypatch, ip_limit=100, email_limit=2)
+    addresses = iter(["one", "two", "three"])
+    monkeypatch.setattr("app.api.auth.client_ip", lambda request: next(addresses))
+    await client.post(
+        "/auth/register", json={"email": "ada@example.com", "password": "password123"}
+    )
+    payload = {"email": "ada@example.com", "password": "not-the-password"}
+    assert (await client.post("/auth/login", json=payload)).status_code == 401
+    assert (await client.post("/auth/login", json=payload)).status_code == 401
+    assert (await client.post("/auth/login", json=payload)).status_code == 429

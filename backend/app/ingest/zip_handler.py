@@ -52,19 +52,29 @@ def is_zip_symlink(info: ZipInfo) -> bool:
     return stat.S_ISLNK(mode)
 
 
-def read_capped(source: BinaryIO, max_bytes: int) -> bytes:
-    """Read a member, counting real bytes. Zip headers can under-report the size."""
-    chunks: list[bytes] = []
+def copy_capped(source: BinaryIO, dest: Path, max_bytes: int) -> int:
+    """Stream a member to disk, counting real bytes. Zip headers can under-report the size.
+
+    Only one chunk is held in memory. Past the cap the partial file is deleted,
+    so the limit is a disk limit rather than a second full copy in RAM.
+    """
     total = 0
-    while True:
-        chunk = source.read(64 * 1024)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            raise UnsafeArchiveError(TOO_LARGE, f"decompressed data exceeded {max_bytes} bytes")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    try:
+        with dest.open("wb") as output:
+            while True:
+                chunk = source.read(64 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise UnsafeArchiveError(
+                        TOO_LARGE, f"decompressed data exceeded {max_bytes} bytes"
+                    )
+                output.write(chunk)
+    except UnsafeArchiveError:
+        dest.unlink(missing_ok=True)
+        raise
+    return total
 
 
 def extract_zip(zip_path: Path, dest: Path, limits: ArchiveLimits) -> tuple[int, int]:
@@ -104,8 +114,6 @@ def extract_zip(zip_path: Path, dest: Path, limits: ArchiveLimits) -> tuple[int,
                 raise UnsafeArchiveError(UNSAFE_PATHS, str(exc)) from exc
             safe_target.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as member:
-                payload = read_capped(member, limits.max_uncompressed_bytes - written)
-            written += len(payload)
-            safe_target.write_bytes(payload)
+                written += copy_capped(member, safe_target, limits.max_uncompressed_bytes - written)
             extracted += 1
     return extracted, skipped

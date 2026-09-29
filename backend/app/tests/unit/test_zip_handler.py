@@ -1,5 +1,6 @@
 import io
 import stat
+import tracemalloc
 import zipfile
 from pathlib import Path
 
@@ -11,8 +12,8 @@ from app.ingest.zip_handler import (
     UNSAFE_PATHS,
     ArchiveLimits,
     UnsafeArchiveError,
+    copy_capped,
     extract_zip,
-    read_capped,
     save_upload,
 )
 
@@ -87,9 +88,55 @@ def test_zip_bomb_is_rejected(tmp_path: Path) -> None:
     assert not (tmp_path / "out" / "bomb.py").exists()
 
 
-def test_read_capped_counts_real_bytes() -> None:
-    with pytest.raises(UnsafeArchiveError):
-        read_capped(io.BytesIO(b"a" * 50), max_bytes=10)
+class _CountingStream(io.RawIOBase):
+    """A source that can report how many bytes were actually pulled."""
+
+    def __init__(self, size: int) -> None:
+        self._remaining = size
+        self.read_bytes = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def read(self, size: int = -1) -> bytes:
+        if self._remaining <= 0:
+            return b""
+        take = self._remaining if size is None or size < 0 else min(size, self._remaining)
+        self._remaining -= take
+        self.read_bytes += take
+        return b"\0" * take
+
+
+def test_copy_capped_stops_early_and_deletes_the_partial(tmp_path: Path) -> None:
+    dest = tmp_path / "member.py"
+    source = _CountingStream(5 * 1024 * 1024)
+    with pytest.raises(UnsafeArchiveError) as caught:
+        copy_capped(source, dest, max_bytes=100_000)
+    assert caught.value.public_message == TOO_LARGE
+    assert not dest.exists()
+    # One extra chunk past the cap is enough to notice the overflow.
+    assert source.read_bytes <= 100_000 + 64 * 1024
+
+
+def test_extract_streams_a_large_member(tmp_path: Path) -> None:
+    archive_path = tmp_path / "big.zip"
+    chunk = b"\0" * (1024 * 1024)
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED) as archive:
+        info = zipfile.ZipInfo("big.py")
+        with archive.open(info, "w") as member:
+            for _ in range(32):
+                member.write(chunk)
+    limits = ArchiveLimits(max_uncompressed_bytes=64 * 1024 * 1024, max_file_count=10)
+    tracemalloc.start()
+    try:
+        extracted, skipped = extract_zip(archive_path, tmp_path / "out", limits)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert (extracted, skipped) == (1, 0)
+    assert (tmp_path / "out" / "big.py").stat().st_size == 32 * 1024 * 1024
+    # A buffered extract of 32MB would peak well above this.
+    assert peak < 8 * 1024 * 1024
 
 
 def test_oversized_upload_is_rejected(tmp_path: Path) -> None:

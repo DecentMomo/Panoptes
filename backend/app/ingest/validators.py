@@ -16,7 +16,21 @@ ALLOWED_EXTENSIONS = {
     ".cfg",
     ".env",
     ".txt",
+    ".pem",
+    ".key",
+    ".crt",
+    ".sh",
+    ".bash",
+    ".ps1",
+    ".xml",
+    ".properties",
+    ".conf",
+    ".tfvars",
+    ".md",
 }
+
+# Names with no extension that still carry secrets or build instructions.
+EXTENSIONLESS_NAMES = {"dockerfile", "makefile"}
 
 
 class PathEscapeError(Exception):
@@ -39,8 +53,13 @@ def is_safe_member_name(name: str) -> bool:
 
 
 def is_allowed_extension(name: str) -> bool:
+    """Keep files a later scanner might flag, including secrets with odd names.
+
+    `.env.local` is where real secrets live, and Gitleaks cannot find a secret
+    in a file that was never extracted. A `.png` is still skipped.
+    """
     filename = Path(name).name.lower()
-    if filename == ".env":
+    if filename.startswith(".env") or filename in EXTENSIONLESS_NAMES:
         return True
     return Path(filename).suffix in ALLOWED_EXTENSIONS
 
