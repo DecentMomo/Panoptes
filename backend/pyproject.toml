@@ -41,7 +41,7 @@ testpaths = ["app/tests"]
 line-length = 100
 target-version = "py312"
 src = ["app"]
-extend-exclude = ["build"]
+extend-exclude = ["build", "samples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

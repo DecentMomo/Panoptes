@@ -59,6 +59,8 @@ What this does not do:
 | Stale output after a prompt change | The cache key is `(fingerprint, model_name, prompt_version)`. A new prompt version cannot reuse an explanation produced by an older prompt. |
 | Ollama failure breaking the scanner | AI work uses a dedicated one-worker executor and a `queued`/`running`/`completed`/`failed` lifecycle. Connection errors, timeouts, and invalid responses become short public reason codes. Scanning and finding access do not depend on Ollama. |
 | AI request flood | Explanation creation uses an in-memory per-user sliding window, separate from scan rate limiting. Only one model call runs at once by default because concurrent 7B inference on a CPU would compete for memory and make both calls slower. |
+| A model response being treated as HTML | Explanations and suggested fixes are rendered as React text. The frontend lint rule `react/no-danger` rejects raw HTML, and a test checks that a `<script>` tag and markdown in a suggested fix stay text. |
+| Suppressing a finding without a record | Changing a finding's status writes one `finding_status_history` row in the same transaction, with the user and the time. A false positive is rejected, including by a database check, unless it has a non-blank reason. Another user gets 404. History has no edit or delete endpoint. |
 
 ## Rate limiting
 
@@ -74,5 +76,6 @@ What this does not do:
 - The login IP is `request.client.host`. `X-Forwarded-For` is not trusted. Behind a reverse proxy every request would look like one address until trusted-proxy handling is added, and the per-IP bucket would then be shared by everyone.
 - An attacker who can overwrite the `access_token` cookie (subdomain takeover, or a plaintext-HTTP man-in-the-middle, since cookie scope ignores scheme and port) can substitute their own session. That is a stolen session of their own user, not a CSRF bypass for the victim: the CSRF MAC is checked against the user id inside that token.
 - Access tokens last 60 minutes and there is no refresh token. After expiry the user logs in again.
+- Deleting a project deletes its scans, findings, and status history. The history is an audit trail for a finding, not a record that survives the project.
 - There is no password reset or email verification.
 - Login and registration do not require the CSRF header, because the user has no CSRF cookie yet. A site can submit a login form on the victim's behalf (login CSRF). The session cookie is `SameSite=Lax`, which blocks it from being sent on cross-site POSTs afterwards.

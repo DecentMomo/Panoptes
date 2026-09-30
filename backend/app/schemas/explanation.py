@@ -11,7 +11,7 @@ class ExplanationContent(BaseModel):
     why_it_matters: str = Field(min_length=1)
     fixed_code: str = Field(min_length=1)
     fix_rationale: str = Field(min_length=1)
-    confidence: Literal["high", "medium", "low"]
+    ai_confidence: Literal["high", "medium", "low"]
 
 
 class ExplanationOut(BaseModel):
@@ -26,7 +26,7 @@ class ExplanationOut(BaseModel):
     why_it_matters: str | None = None
     fixed_code: str | None = None
     fix_rationale: str | None = None
-    confidence: str | None = None
+    ai_confidence: str | None = None
     latency_ms: int | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None

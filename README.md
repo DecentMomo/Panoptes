@@ -76,6 +76,16 @@ are small local measurements, not a benchmark. With Ollama stopped, the request
 failed as `model_unavailable` while the project, scan, and finding APIs continued
 to return normally; retrying after restart completed successfully.
 
+## Dashboard and finding status
+
+The scan page shows severity counts, findings by CWE and OWASP category, and a
+table that can be filtered by severity, tool, status, and file path. Opening a
+finding shows the code with the flagged lines marked, the official CWE and
+OWASP references, and the suggested fix as a line diff. Model output is rendered
+as text. A finding can be marked open, fixed, false positive, or accepted risk.
+A false positive requires a reason, and every change is stored with the user and
+the time. There is no way to edit or delete that history.
+
 ## Layout
 
 - `backend/` — FastAPI application

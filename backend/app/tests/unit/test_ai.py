@@ -62,7 +62,7 @@ def test_explanation_schema_requires_fields_but_ignores_authority_keys() -> None
             "why_it_matters": "An attacker can run commands.",
             "fixed_code": "safe_parse(value)",
             "fix_rationale": "Parsing data does not execute it.",
-            "confidence": "high",
+            "ai_confidence": "high",
             "severity": "info",
             "status": "false_positive",
         }
@@ -72,7 +72,7 @@ def test_explanation_schema_requires_fields_but_ignores_authority_keys() -> None
         "why_it_matters",
         "fixed_code",
         "fix_rationale",
-        "confidence",
+        "ai_confidence",
     }
     with pytest.raises(ValidationError):
         ExplanationContent.model_validate({"plain_explanation": "incomplete"})

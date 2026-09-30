@@ -5,7 +5,15 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
-from app.models import AIExplanation, Finding, Project, Scan, ScannerRun, User  # noqa: F401
+from app.models import (  # noqa: F401
+    AIExplanation,
+    Finding,
+    FindingStatusHistory,
+    Project,
+    Scan,
+    ScannerRun,
+    User,
+)
 
 config = context.config
 # ConfigParser treats "%" as interpolation. Escape it so passwords with "%" work.

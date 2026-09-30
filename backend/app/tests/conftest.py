@@ -14,7 +14,7 @@ from app.api.scans import scan_rate_limiter
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import AIExplanation, Project, User  # noqa: F401
+from app.models import AIExplanation, FindingStatusHistory, Project, User  # noqa: F401
 from app.services.ai_runner import InlineExplanationRunner, get_explanation_runner
 from app.services.scan_runner import InlineScanRunner, get_scan_runner
 

@@ -85,7 +85,7 @@ class SuccessfulClient:
                     "why_it_matters": "An attacker can run code with the application's access.",
                     "fixed_code": "result = safe_parse(user_input)",
                     "fix_rationale": "Parse expected data instead of executing it.",
-                    "confidence": "high",
+                    "ai_confidence": "high",
                     "severity": "info",
                     "status": "false_positive",
                 }
@@ -207,6 +207,35 @@ async def test_invalid_model_json_is_not_stored(client, session_factory, monkeyp
             return OllamaResult("not JSON", 10, 2, 1)
 
     monkeypatch.setattr("app.ai.explain_service.OllamaClient", InvalidClient)
+    assert (await client.post(f"/findings/{finding_id}/explanation")).status_code == 202
+    state = (await client.get(f"/findings/{finding_id}/explanation")).json()
+    assert state["status"] == "failed"
+    assert state["failure_reason"] == "invalid_response"
+    assert state["plain_explanation"] is None
+
+
+async def test_old_confidence_key_is_rejected(client, session_factory, monkeypatch) -> None:
+    await register_and_login(client, "ada@example.com")
+    finding_id = _create_finding(session_factory)
+
+    class OldContract:
+        def generate(self, system: str, prompt: str) -> OllamaResult:
+            return OllamaResult(
+                json.dumps(
+                    {
+                        "plain_explanation": "eval executes text.",
+                        "why_it_matters": "An attacker can run code.",
+                        "fixed_code": "parse(value)",
+                        "fix_rationale": "Do not execute it.",
+                        "confidence": "high",
+                    }
+                ),
+                10,
+                2,
+                1,
+            )
+
+    monkeypatch.setattr("app.ai.explain_service.OllamaClient", OldContract)
     assert (await client.post(f"/findings/{finding_id}/explanation")).status_code == 202
     state = (await client.get(f"/findings/{finding_id}/explanation")).json()
     assert state["status"] == "failed"

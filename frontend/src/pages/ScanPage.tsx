@@ -1,12 +1,16 @@
+import { useEffect } from "react"
 import { Link, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import { toast } from "sonner"
 
 import { getScan, listFindings } from "@/api/scans"
-import type { ScanDetail } from "@/types"
+import { FindingsCharts } from "@/components/scan/FindingsCharts"
+import { FindingsTable } from "@/components/scan/FindingsTable"
+import { SeverityCards } from "@/components/scan/SeverityCards"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-
-const SEVERITIES = ["critical", "high", "medium", "low", "info"]
+import { Skeleton } from "@/components/ui/skeleton"
+import type { ScanDetail } from "@/types"
 
 function PartialBanner({ scan }: { scan: ScanDetail }) {
   const missed = scan.scanner_runs.filter((run) => run.status !== "completed")
@@ -16,7 +20,7 @@ function PartialBanner({ scan }: { scan: ScanDetail }) {
     .join(", ")
   const shown = kept.map((run) => run.tool).join(" and ")
   return (
-    <p className="text-sm">
+    <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm">
       Partial results: {why || "a scanner did not finish"}.
       {shown ? ` Findings from ${shown} are shown.` : ""}
     </p>
@@ -35,44 +39,50 @@ export function ScanPage() {
       return status === "queued" || status === "running" ? 2000 : false
     },
   })
+  const ready = scan.data?.status === "completed" || scan.data?.status === "partial"
   const findings = useQuery({
     queryKey: ["findings", id],
     queryFn: () => listFindings(id),
-    enabled: scan.data?.status === "completed" || scan.data?.status === "partial",
+    enabled: ready,
   })
 
+  useEffect(() => {
+    if (scan.isError) toast.error("Could not load this scan.")
+    if (findings.isError) toast.error("Could not load findings.")
+  }, [findings.isError, scan.isError])
+
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-5xl flex-col gap-6 p-6">
-      <header>
-        <p className="text-sm text-muted-foreground">
-          <Link className="underline underline-offset-4" to="/">
-            Projects
-          </Link>
-        </p>
-        <h1 className="text-2xl font-medium">{scan.data?.source_name ?? "Scan"}</h1>
+    <main className="mx-auto flex min-h-svh w-full max-w-6xl flex-col gap-6 p-6">
+      <header className="space-y-2">
+        <Link className="text-sm underline underline-offset-4" to="/">
+          Projects
+        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-medium">{scan.data?.source_name ?? "Scan"}</h1>
+          {scan.data ? (
+            <Badge variant={scan.data.status === "failed" ? "destructive" : "secondary"}>
+              {scan.data.status}
+            </Badge>
+          ) : null}
+        </div>
       </header>
 
       {scan.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading scan…</p>
+        <div className="grid gap-3 sm:grid-cols-5">
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-24" />
+          ))}
+        </div>
       ) : scan.isError || !scan.data ? (
         <p className="text-sm text-destructive">Could not load this scan.</p>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={scan.data.status === "failed" ? "destructive" : "secondary"}>
-              {scan.data.status}
-            </Badge>
-            {SEVERITIES.map((severity) => (
-              <Badge key={severity} variant="outline">
-                {severity} {scan.data.severity_counts[severity] ?? 0}
-              </Badge>
-            ))}
-          </div>
+          <SeverityCards counts={scan.data.severity_counts} />
           {scan.data.status === "partial" ? <PartialBanner scan={scan.data} /> : null}
           {scan.data.error_message ? (
             <p className="text-sm text-destructive">{scan.data.error_message}</p>
           ) : null}
-          <div className="flex flex-col gap-2">
+          <div className="grid gap-3 md:grid-cols-3">
             {scan.data.scanner_runs.map((run) => (
               <Card key={run.id}>
                 <CardHeader>
@@ -80,7 +90,6 @@ export function ScanPage() {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
                   {run.status}
-                  {run.tool_version ? ` · ${run.tool_version}` : ""}
                   {run.finding_count ? ` · ${run.finding_count} findings` : ""}
                   {run.duration_ms != null ? ` · ${run.duration_ms} ms` : ""}
                   {run.error_message ? ` · ${run.error_message}` : ""}
@@ -88,43 +97,13 @@ export function ScanPage() {
               </Card>
             ))}
           </div>
+          {findings.isPending && ready ? <Skeleton className="h-64" /> : null}
           {findings.data && findings.data.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-border text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Severity</th>
-                    <th className="px-3 py-2 font-medium">Rule</th>
-                    <th className="px-3 py-2 font-medium">Location</th>
-                    <th className="px-3 py-2 font-medium">Tools</th>
-                    <th className="px-3 py-2 font-medium">OWASP</th>
-                    <th className="px-3 py-2 font-medium">Title</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {findings.data.map((finding) => (
-                    <tr key={finding.id} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2">{finding.severity}</td>
-                      <td className="px-3 py-2">{finding.rule_id}</td>
-                      <td className="px-3 py-2">
-                        {finding.file_path}:{finding.line_start}
-                      </td>
-                      <td className="px-3 py-2">{finding.source_tools.join(", ")}</td>
-                      <td className="px-3 py-2">{finding.owasp_category ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <Link
-                          className="underline underline-offset-4"
-                          to={`/findings/${finding.id}`}
-                        >
-                          {finding.title}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : scan.data.status === "completed" || scan.data.status === "partial" ? (
+            <>
+              <FindingsCharts findings={findings.data} />
+              <FindingsTable findings={findings.data} />
+            </>
+          ) : ready && findings.data ? (
             <p className="text-sm text-muted-foreground">No findings.</p>
           ) : null}
         </>

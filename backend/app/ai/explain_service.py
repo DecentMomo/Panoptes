@@ -33,7 +33,7 @@ def fixed_gitleaks_explanation() -> ExplanationOut:
             "Rotate the exposed credential first, then keep only a non-secret "
             "configuration reference."
         ),
-        confidence="high",
+        ai_confidence="high",
     )
 
 
@@ -137,7 +137,7 @@ def run_explanation(
         row.why_it_matters = content.why_it_matters
         row.fixed_code = content.fixed_code
         row.fix_rationale = content.fix_rationale
-        row.ai_confidence = content.confidence
+        row.ai_confidence = content.ai_confidence
         db.commit()
         logger.info(
             "AI explanation %s completed model=%s latency_ms=%d prompt_tokens=%d "
@@ -192,7 +192,7 @@ def explanation_out(row: AIExplanation) -> ExplanationOut:
         why_it_matters=row.why_it_matters,
         fixed_code=row.fixed_code,
         fix_rationale=row.fix_rationale,
-        confidence=row.ai_confidence,
+        ai_confidence=row.ai_confidence,
         latency_ms=row.latency_ms,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,

@@ -68,6 +68,17 @@ export type ExplanationFailure =
   | "timeout"
   | "invalid_response"
 
+export type StatusHistory = {
+  id: number
+  finding_id: number
+  user_id: number
+  user_email: string
+  from_status: string
+  to_status: string
+  reason: string | null
+  created_at: string
+}
+
 export type Explanation = {
   status: ExplanationStatus
   failure_reason: ExplanationFailure | null
@@ -78,7 +89,7 @@ export type Explanation = {
   why_it_matters: string | null
   fixed_code: string | null
   fix_rationale: string | null
-  confidence: string | null
+  ai_confidence: string | null
   latency_ms: number | null
   prompt_tokens: number | null
   completion_tokens: number | null

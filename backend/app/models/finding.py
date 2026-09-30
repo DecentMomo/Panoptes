@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,6 +11,10 @@ class Finding(Base):
     __tablename__ = "findings"
     __table_args__ = (
         UniqueConstraint("scan_id", "fingerprint", name="uq_findings_scan_fingerprint"),
+        CheckConstraint(
+            "status IN ('open', 'fixed', 'false_positive', 'accepted_risk')",
+            name="ck_findings_status",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
