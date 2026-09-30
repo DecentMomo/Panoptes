@@ -1,23 +1,15 @@
 import shutil
-import zipfile
 from pathlib import Path
 
 from app.models.scan import Scan
 from app.tests.conftest import register_and_login
-from app.tests.integration.test_scan_flow import SAMPLE, _stub_other_scanners
-
-
-def _zip_dir(source: Path, dest: Path) -> None:
-    with zipfile.ZipFile(dest, "w") as archive:
-        for path in source.iterdir():
-            if path.is_file():
-                archive.write(path, path.name)
+from app.tests.scan_helpers import SAMPLE, stub_other_scanners, zip_dir
 
 
 def _prepare(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("app.services.scan_orchestrator.work_root", lambda: tmp_path)
     monkeypatch.setattr("app.api.scans.scan_directory", lambda scan_id: tmp_path / str(scan_id))
-    _stub_other_scanners(monkeypatch)
+    stub_other_scanners(monkeypatch)
 
 
 async def _scan(client, project_id: int, archive: Path) -> int:
@@ -38,7 +30,7 @@ async def test_fix_then_rescan_moves_only_that_finding_to_fixed(
     tree = tmp_path / "tree"
     shutil.copytree(SAMPLE, tree)
     first_archive = tmp_path / "before.zip"
-    _zip_dir(tree, first_archive)
+    zip_dir(tree, first_archive)
     base_id = await _scan(client, project_id, first_archive)
     base_findings = (await client.get(f"/scans/{base_id}/findings")).json()
     calc = next(
@@ -54,7 +46,7 @@ async def test_fix_then_rescan_moves_only_that_finding_to_fixed(
     query = (tree / "query.py").read_text(encoding="utf-8")
     (tree / "query.py").write_text("\n" + query, encoding="utf-8")
     second_archive = tmp_path / "after.zip"
-    _zip_dir(tree, second_archive)
+    zip_dir(tree, second_archive)
     head_id = await _scan(client, project_id, second_archive)
 
     compared = await client.get(
@@ -79,7 +71,7 @@ async def test_compare_rejects_the_same_scan_and_unfinished_scans(
     await register_and_login(client, "ada@example.com")
     project_id = (await client.post("/projects", json={"name": "Diff"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     scan_id = await _scan(client, project_id, archive)
     same = await client.get(
         f"/projects/{project_id}/compare", params={"base": scan_id, "head": scan_id}
@@ -116,7 +108,7 @@ async def test_compare_is_scoped_to_the_owner_and_project(clients, monkeypatch, 
     other_project = (await alice.post("/projects", json={"name": "A2"})).json()["id"]
     bob_project = (await bob.post("/projects", json={"name": "B"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     base_id = await _scan(alice, alice_project, archive)
     head_id = await _scan(alice, alice_project, archive)
     other_id = await _scan(alice, other_project, archive)

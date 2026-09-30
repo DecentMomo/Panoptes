@@ -1,22 +1,14 @@
 import shutil
-import zipfile
 from pathlib import Path
 
 from app.tests.conftest import register_and_login
-from app.tests.integration.test_scan_flow import SAMPLE, _stub_other_scanners
-
-
-def _zip_dir(source: Path, dest: Path) -> None:
-    with zipfile.ZipFile(dest, "w") as archive:
-        for path in source.iterdir():
-            if path.is_file():
-                archive.write(path, path.name)
+from app.tests.scan_helpers import SAMPLE, stub_other_scanners, zip_dir
 
 
 def _prepare(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("app.services.scan_orchestrator.work_root", lambda: tmp_path)
     monkeypatch.setattr("app.api.scans.scan_directory", lambda scan_id: tmp_path / str(scan_id))
-    _stub_other_scanners(monkeypatch)
+    stub_other_scanners(monkeypatch)
 
 
 async def _scan(client, project_id: int, archive: Path) -> int:
@@ -40,7 +32,7 @@ async def test_false_positive_carries_to_an_unchanged_rescan(client, monkeypatch
     user_id = logged_in.json()["id"]
     project_id = (await client.post("/projects", json={"name": "Carry"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     first_id = await _scan(client, project_id, archive)
     first = (await client.get(f"/scans/{first_id}/findings")).json()
     finding = _calc(first)
@@ -72,7 +64,7 @@ async def test_a_changed_flagged_line_does_not_inherit_a_suppression(
     tree = tmp_path / "tree"
     shutil.copytree(SAMPLE, tree)
     archive = tmp_path / "sample.zip"
-    _zip_dir(tree, archive)
+    zip_dir(tree, archive)
     first_id = await _scan(client, project_id, archive)
     finding = _calc((await client.get(f"/scans/{first_id}/findings")).json())
     await client.patch(
@@ -85,7 +77,7 @@ async def test_a_changed_flagged_line_does_not_inherit_a_suppression(
         encoding="utf-8",
     )
     changed_archive = tmp_path / "changed.zip"
-    _zip_dir(tree, changed_archive)
+    zip_dir(tree, changed_archive)
     second_id = await _scan(client, project_id, changed_archive)
     second = _calc((await client.get(f"/scans/{second_id}/findings")).json())
     assert second["fingerprint"] != finding["fingerprint"]
@@ -99,7 +91,7 @@ async def test_accepted_risk_carries_and_fixed_does_not(client, monkeypatch, tmp
     await register_and_login(client, "ada@example.com")
     project_id = (await client.post("/projects", json={"name": "Carry"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     first_id = await _scan(client, project_id, archive)
     findings = (await client.get(f"/scans/{first_id}/findings")).json()
     calc = _calc(findings)
@@ -127,7 +119,7 @@ async def test_another_project_does_not_inherit_a_suppression(
     first_project = (await client.post("/projects", json={"name": "A"})).json()["id"]
     second_project = (await client.post("/projects", json={"name": "B"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     first_id = await _scan(client, first_project, archive)
     finding = _calc((await client.get(f"/scans/{first_id}/findings")).json())
     await client.patch(
@@ -146,7 +138,7 @@ async def test_a_two_hop_carry_still_names_the_original_user(client, monkeypatch
     user_id = logged_in.json()["id"]
     project_id = (await client.post("/projects", json={"name": "Carry"})).json()["id"]
     archive = tmp_path / "sample.zip"
-    _zip_dir(SAMPLE, archive)
+    zip_dir(SAMPLE, archive)
     first_id = await _scan(client, project_id, archive)
     finding = _calc((await client.get(f"/scans/{first_id}/findings")).json())
     await client.patch(

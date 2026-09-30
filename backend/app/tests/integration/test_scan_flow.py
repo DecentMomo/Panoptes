@@ -1,39 +1,14 @@
 import logging
 import shutil
-import zipfile
 from pathlib import Path
 
 import pytest
 
 from app.scanners.base import RawFinding, ToolResult
 from app.tests.conftest import register_and_login
-
-
-def _sample_dir() -> Path:
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "samples" / "vulnerable-python"
-        if candidate.is_dir():
-            return candidate
-    raise FileNotFoundError("samples/vulnerable-python")
-
-
-SAMPLE = _sample_dir()
-
-
-def _sample_zip(path: Path) -> None:
-    with zipfile.ZipFile(path, "w") as archive:
-        for source in SAMPLE.iterdir():
-            if source.is_file():
-                archive.write(source, source.name)
-
-
-def _empty(root, workdir):
-    return ToolResult("", "", 0, 1, False), []
-
-
-def _stub_other_scanners(monkeypatch) -> None:
-    monkeypatch.setattr("app.services.scan_orchestrator.run_semgrep", _empty)
-    monkeypatch.setattr("app.services.scan_orchestrator.run_gitleaks", _empty)
+from app.tests.scan_helpers import empty_scanner as _empty
+from app.tests.scan_helpers import sample_zip as _sample_zip
+from app.tests.scan_helpers import stub_other_scanners as _stub_other_scanners
 
 
 async def test_upload_scans_the_sample(client, session_factory, monkeypatch, tmp_path) -> None:
