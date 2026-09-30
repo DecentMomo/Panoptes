@@ -10,6 +10,7 @@ import { useExplanation } from "@/components/finding/useExplanation"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { severityBorder, severityText } from "@/lib/severity"
 
 export function FindingPage() {
   const { findingId } = useParams()
@@ -35,7 +36,12 @@ export function FindingPage() {
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-medium">{finding.data.title}</h1>
-              <Badge variant="outline" className="capitalize">
+              <Badge
+                variant="outline"
+                className={`capitalize ${severityText(finding.data.severity)} ${severityBorder(
+                  finding.data.severity,
+                )}`}
+              >
                 {finding.data.severity}
               </Badge>
               <Badge variant="secondary">{finding.data.rule_id}</Badge>

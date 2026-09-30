@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-
-const SEVERITIES = ["critical", "high", "medium", "low", "info"]
+import { SEVERITIES, severityText } from "@/lib/severity"
 
 export function SeverityCards({ counts }: { counts: Record<string, number> }) {
   return (
@@ -8,9 +7,13 @@ export function SeverityCards({ counts }: { counts: Record<string, number> }) {
       {SEVERITIES.map((severity) => (
         <Card key={severity}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm capitalize text-muted-foreground">{severity}</CardTitle>
+            <CardTitle className={`text-sm capitalize ${severityText(severity)}`}>
+              {severity}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-medium">{counts[severity] ?? 0}</CardContent>
+          <CardContent className={`text-2xl font-medium ${severityText(severity)}`}>
+            {counts[severity] ?? 0}
+          </CardContent>
         </Card>
       ))}
     </div>

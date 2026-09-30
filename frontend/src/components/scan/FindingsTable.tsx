@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 
+import { SEVERITIES, severityText } from "@/lib/severity"
 import type { Finding } from "@/types"
 
-const SEVERITY_RANK: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  info: 4,
-}
+const SEVERITY_RANK: Record<string, number> = Object.fromEntries(
+  SEVERITIES.map((severity, index) => [severity, index]),
+)
 
 export function FindingsTable({ findings }: { findings: Finding[] }) {
   const [severity, setSeverity] = useState("all")
@@ -39,7 +36,7 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Select label="Severity" value={severity} onChange={setSeverity} options={["critical", "high", "medium", "low", "info"]} />
+        <Select label="Severity" value={severity} onChange={setSeverity} options={[...SEVERITIES]} />
         <Select label="Tool" value={tool} onChange={setTool} options={tools} />
         <Select label="Status" value={status} onChange={setStatus} options={statuses} />
         <input
@@ -68,7 +65,9 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
             <tbody>
               {shown.map((finding) => (
                 <tr key={finding.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 capitalize">{finding.severity}</td>
+                  <td className={`px-3 py-2 capitalize ${severityText(finding.severity)}`}>
+                    {finding.severity}
+                  </td>
                   <td className="px-3 py-2">{finding.rule_id}</td>
                   <td className="px-3 py-2">{finding.file_path}:{finding.line_start}</td>
                   <td className="px-3 py-2">{finding.source_tools.join(", ")}</td>
