@@ -3,7 +3,8 @@
 AI-assisted code vulnerability scanner. You can register, create a project, and
 either upload a zip or clone a public GitHub or GitLab repository. Panoptes runs
 Bandit, Semgrep, and Gitleaks, merges duplicate findings, and labels them with
-CWE and OWASP Top 10:2025. Explanations come in a later phase.
+CWE and OWASP Top 10:2025. A local Ollama model explains findings and suggests
+fixes on demand; scanning still works when the model is unavailable.
 
 ## Run
 
@@ -16,8 +17,8 @@ docker compose up --build
 - UI: http://localhost:5173
 - Ollama: http://localhost:11434
 
-The Ollama model is not pulled automatically (it is several gigabytes). When
-explanations are added, pull it with:
+The Ollama model is not pulled automatically because it is several gigabytes.
+Pull it once with:
 
 ```bash
 docker compose exec ollama ollama pull qwen2.5-coder:7b
@@ -48,6 +49,32 @@ either. `occurrence` is the Nth identical snippet in that file (the first is 0).
 Without it, two copies of the same line would share one fingerprint and one
 would be dropped. Order is by line, so the index stays stable when the file
 shifts.
+
+## AI explanations
+
+Opening a finding queues one explanation on a dedicated single-worker executor.
+The API returns immediately with `202`, and the page polls every two seconds
+until the row is `completed` or `failed`. A cached result with the same finding
+fingerprint, model name, and prompt version returns immediately with `200`.
+Explanations are generated only when opened: sending every result from a
+150-finding scan to a local model would make the scan unusable.
+
+Source code is untrusted prompt data. Panoptes places it between explicit
+delimiters, tells the model never to obey instructions inside it, and validates
+the JSON response before storing it. The explanation table can hold explanation
+and suggested-code text but has no columns for scanner severity, CWE, OWASP
+category, finding status, or vulnerability verdict. Gitleaks findings never
+reach Ollama and receive fixed guidance instead.
+
+If Ollama is down, times out, or returns invalid JSON, the finding remains fully
+available and the page offers Retry. Each successful call records latency,
+prompt tokens, and completion tokens. On this development machine,
+`qwen2.5-coder:7b` took 67.4 seconds for the prompt-injection sample (231 prompt
+tokens, 200 completion tokens) and 52.1 seconds for a second finding (219 prompt
+tokens, 193 completion tokens): 59.8 seconds average across the two calls. These
+are small local measurements, not a benchmark. With Ollama stopped, the request
+failed as `model_unavailable` while the project, scan, and finding APIs continued
+to return normally; retrying after restart completed successfully.
 
 ## Layout
 

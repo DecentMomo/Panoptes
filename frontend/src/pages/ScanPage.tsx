@@ -111,7 +111,14 @@ export function ScanPage() {
                       </td>
                       <td className="px-3 py-2">{finding.source_tools.join(", ")}</td>
                       <td className="px-3 py-2">{finding.owasp_category ?? "—"}</td>
-                      <td className="px-3 py-2">{finding.title}</td>
+                      <td className="px-3 py-2">
+                        <Link
+                          className="underline underline-offset-4"
+                          to={`/findings/${finding.id}`}
+                        >
+                          {finding.title}
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

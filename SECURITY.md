@@ -49,6 +49,17 @@ What this does not do:
 - The size cap is applied after the clone. During the clone, only the 60 second timeout bounds how much is downloaded.
 - `http.followRedirects=false` means a renamed repository fails instead of being followed. That is intentional: a redirect would be a host we did not check.
 
+## AI explanations
+
+| Threat | Control |
+| --- | --- |
+| Prompt injection in scanned source | The prompt labels the code as untrusted data, encloses it in explicit delimiters, and says never to follow instructions inside it. Delimiter text found in the source is replaced before prompting. Ollama's JSON is validated with Pydantic before any text is stored. |
+| The model changing the scanner's verdict | The model is only asked for explanation and fix text. The `ai_explanations` table has no severity, CWE, OWASP, finding-status, or vulnerability-verdict columns, so even a hostile valid response has nowhere to persist those values. |
+| Sending a discovered secret to another component | Findings reported by Gitleaks never call Ollama, even though their stored preview is redacted. The API returns fixed scanner guidance instead. |
+| Stale output after a prompt change | The cache key is `(fingerprint, model_name, prompt_version)`. A new prompt version cannot reuse an explanation produced by an older prompt. |
+| Ollama failure breaking the scanner | AI work uses a dedicated one-worker executor and a `queued`/`running`/`completed`/`failed` lifecycle. Connection errors, timeouts, and invalid responses become short public reason codes. Scanning and finding access do not depend on Ollama. |
+| AI request flood | Explanation creation uses an in-memory per-user sliding window, separate from scan rate limiting. Only one model call runs at once by default because concurrent 7B inference on a CPU would compete for memory and make both calls slower. |
+
 ## Rate limiting
 
 | Threat | Control |
@@ -59,7 +70,7 @@ What this does not do:
 
 ## Known limitations
 
-- Login and scan rate limits are not shared across processes and are forgotten on restart. The AI explanation endpoint is limited when it is added.
+- Login, scan, and AI explanation rate limits are not shared across processes and are forgotten on restart.
 - The login IP is `request.client.host`. `X-Forwarded-For` is not trusted. Behind a reverse proxy every request would look like one address until trusted-proxy handling is added, and the per-IP bucket would then be shared by everyone.
 - An attacker who can overwrite the `access_token` cookie (subdomain takeover, or a plaintext-HTTP man-in-the-middle, since cookie scope ignores scheme and port) can substitute their own session. That is a stolen session of their own user, not a CSRF bypass for the victim: the CSRF MAC is checked against the user id inside that token.
 - Access tokens last 60 minutes and there is no refresh token. After expiry the user logs in again.

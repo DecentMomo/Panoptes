@@ -9,11 +9,13 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.api.auth import login_email_limiter, login_ip_limiter
+from app.api.findings import ai_rate_limiter
 from app.api.scans import scan_rate_limiter
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import Project, User  # noqa: F401
+from app.models import AIExplanation, Project, User  # noqa: F401
+from app.services.ai_runner import InlineExplanationRunner, get_explanation_runner
 from app.services.scan_runner import InlineScanRunner, get_scan_runner
 
 # 127.0.0.1 rather than localhost: on Docker Desktop for Windows, "localhost" can
@@ -66,11 +68,15 @@ async def clients(monkeypatch):
     login_ip_limiter.clear()
     login_email_limiter.clear()
     scan_rate_limiter.clear()
+    ai_rate_limiter.clear()
     _ensure_test_database()
     Base.metadata.drop_all(_engine)
     Base.metadata.create_all(_engine)
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_scan_runner] = lambda: InlineScanRunner(_SessionLocal)
+    app.dependency_overrides[get_explanation_runner] = lambda: InlineExplanationRunner(
+        _SessionLocal
+    )
 
     transport = ASGITransport(app=app)
     opened: list[AsyncClient] = []

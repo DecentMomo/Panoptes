@@ -61,3 +61,26 @@ export type Finding = {
   status_reason: string | null
   created_at: string
 }
+
+export type ExplanationStatus = "queued" | "running" | "completed" | "failed"
+export type ExplanationFailure =
+  | "model_unavailable"
+  | "timeout"
+  | "invalid_response"
+
+export type Explanation = {
+  status: ExplanationStatus
+  failure_reason: ExplanationFailure | null
+  ai_generated: boolean
+  model_name: string | null
+  prompt_version: string | null
+  plain_explanation: string | null
+  why_it_matters: string | null
+  fixed_code: string | null
+  fix_rationale: string | null
+  confidence: string | null
+  latency_ms: number | null
+  prompt_tokens: number | null
+  completion_tokens: number | null
+  updated_at: string | null
+}

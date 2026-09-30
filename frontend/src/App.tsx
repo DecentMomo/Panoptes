@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom"
 
 import { RequireAuth } from "@/components/RequireAuth"
+import { FindingPage } from "@/pages/FindingPage"
 import { LoginPage } from "@/pages/LoginPage"
 import { ProjectDetailPage } from "@/pages/ProjectDetailPage"
 import { ProjectsPage } from "@/pages/ProjectsPage"
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
         <Route path="/scans/:scanId" element={<ScanPage />} />
+        <Route path="/findings/:findingId" element={<FindingPage />} />
       </Route>
     </Routes>
   )

@@ -5,10 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.explain_service import mark_interrupted_explanations
 from app.api.auth import router as auth_router
+from app.api.findings import router as findings_router
 from app.api.projects import router as projects_router
 from app.api.scans import router as scans_router
 from app.core.config import settings
+from app.services.ai_runner import ThreadPoolExplanationRunner
 from app.services.scan_orchestrator import mark_interrupted_scans
 from app.services.scan_runner import ThreadPoolScanRunner
 
@@ -18,13 +21,16 @@ logger = logging.getLogger("panoptes")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.scan_runner = ThreadPoolScanRunner(settings.max_concurrent_scans)
+    app.state.explanation_runner = ThreadPoolExplanationRunner(settings.ai_max_workers)
     # Tests set this so importing the app does not touch the development database.
     if os.environ.get("PANOPTES_SKIP_STARTUP") != "1":
         mark_interrupted_scans()
+        mark_interrupted_explanations()
     try:
         yield
     finally:
         app.state.scan_runner.shutdown()
+        app.state.explanation_runner.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -36,6 +42,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Panoptes", lifespan=lifespan)
     app.include_router(auth_router)
+    app.include_router(findings_router)
     app.include_router(projects_router)
     app.include_router(scans_router)
     app.add_middleware(

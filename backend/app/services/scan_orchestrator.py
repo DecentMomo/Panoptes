@@ -129,7 +129,8 @@ def _execute(db: Session, scan: Scan, directory: Path) -> None:
         _fail(db, scan, SCAN_FAILED)
         return
 
-    raw = len(findings) + duplicates_dropped
+    pre_prepare = len(findings)
+    raw = pre_prepare + duplicates_dropped
     merges = _prepare(extracted_root, findings)
     rows = [_to_row(scan.id, finding) for finding in findings]
     stored = len(rows)
@@ -141,7 +142,7 @@ def _execute(db: Session, scan: Scan, directory: Path) -> None:
         merges,
         stored,
     )
-    if stored != raw - duplicates_dropped - merges:
+    if stored != pre_prepare - merges:
         logger.error(
             "scan %s finding count mismatch raw=%d duplicates=%d merged=%d stored=%d",
             scan.id,

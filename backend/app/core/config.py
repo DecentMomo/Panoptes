@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5-coder:7b"
+    ollama_timeout_seconds: int = 90
+    ai_max_workers: int = 1
+    ai_rate_limit: int = 5
+    ai_rate_window_seconds: int = 60
+    ai_max_snippet_chars: int = 8000
     # Accepts a JSON list (as in .env.example) or a single origin string.
     cors_origins: list[str] = ["http://localhost:5173"]
     # Empty means the system temp directory. Uploaded code is deleted after the scan.
