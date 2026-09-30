@@ -33,4 +33,7 @@ class FindingStatusHistory(Base):
     from_status: Mapped[str] = mapped_column(String(20))
     to_status: Mapped[str] = mapped_column(String(20))
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    carried_from_scan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -55,9 +55,17 @@ export function StatusControls({
   }
 
   const reasonMissing = nextStatus === "false_positive" && reason.trim() === ""
+  const carried = [...(history.data ?? [])]
+    .reverse()
+    .find((item) => item.carried_from_scan_id && item.to_status === status)
 
   return (
     <section className="space-y-4">
+      {carried ? (
+        <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm">
+          carried over from scan {carried.carried_from_scan_id}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {STATUSES.map((value) => (
           <Button
@@ -99,7 +107,9 @@ export function StatusControls({
           <ul className="space-y-2 text-sm text-muted-foreground">
             {history.data.map((item) => (
               <li key={item.id}>
-                {item.from_status} to {item.to_status} by {item.user_email}
+                {item.carried_from_scan_id
+                  ? `carried over from scan ${item.carried_from_scan_id} · originally by ${item.user_email}`
+                  : `${item.from_status} to ${item.to_status} by ${item.user_email}`}
                 {item.reason ? ` · ${item.reason}` : ""}
               </li>
             ))}

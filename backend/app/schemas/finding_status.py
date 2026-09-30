@@ -19,4 +19,5 @@ class StatusHistoryOut(BaseModel):
     from_status: str
     to_status: str
     reason: str | None
+    carried_from_scan_id: int | None
     created_at: datetime

@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom"
 
 import { RequireAuth } from "@/components/RequireAuth"
+import { ComparePage } from "@/pages/ComparePage"
 import { FindingPage } from "@/pages/FindingPage"
 import { LoginPage } from "@/pages/LoginPage"
 import { ProjectDetailPage } from "@/pages/ProjectDetailPage"
@@ -16,6 +17,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/projects/:projectId/compare" element={<ComparePage />} />
         <Route path="/scans/:scanId" element={<ScanPage />} />
         <Route path="/findings/:findingId" element={<FindingPage />} />
       </Route>

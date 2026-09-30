@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { logout } from "@/api/auth"
 import { ApiError } from "@/api/client"
 import { createProject, deleteProject, listProjects } from "@/api/projects"
+import { getStats } from "@/api/stats"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -33,6 +34,7 @@ export function ProjectsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const projects = useQuery({ queryKey: ["projects"], queryFn: listProjects })
+  const stats = useQuery({ queryKey: ["stats"], queryFn: getStats })
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -64,6 +66,7 @@ export function ProjectsPage() {
     try {
       await createProject(name.trim(), description)
       await queryClient.invalidateQueries({ queryKey: ["projects"] })
+      await queryClient.invalidateQueries({ queryKey: ["stats"] })
       setCreateOpen(false)
       setName("")
       setDescription("")
@@ -85,6 +88,7 @@ export function ProjectsPage() {
     try {
       await deleteProject(deleteTarget.id)
       await queryClient.invalidateQueries({ queryKey: ["projects"] })
+      await queryClient.invalidateQueries({ queryKey: ["stats"] })
       setDeleteTarget(null)
       toast.success("Project deleted")
     } catch (error) {
@@ -109,6 +113,48 @@ export function ProjectsPage() {
           </Button>
         </div>
       </header>
+
+      {stats.isPending ? (
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : stats.isError ? (
+        <p className="text-sm text-destructive">Could not load stats.</p>
+      ) : stats.data ? (
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardDescription>Projects</CardDescription>
+              <CardTitle>{stats.data.project_count}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>Scans</CardDescription>
+              <CardTitle>{stats.data.scan_count}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>Suppressed findings</CardDescription>
+              <CardTitle>{stats.data.suppressed_count}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>Average AI latency</CardDescription>
+              <CardTitle>
+                {stats.data.avg_latency_ms === null
+                  ? "—"
+                  : `${(stats.data.avg_latency_ms / 1000).toFixed(1)}s`}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      ) : null}
 
       {projects.isPending ? (
         <div className="grid gap-4 sm:grid-cols-2">

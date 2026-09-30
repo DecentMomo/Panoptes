@@ -76,6 +76,7 @@ export type StatusHistory = {
   from_status: string
   to_status: string
   reason: string | null
+  carried_from_scan_id: number | null
   created_at: string
 }
 
@@ -94,4 +95,21 @@ export type Explanation = {
   prompt_tokens: number | null
   completion_tokens: number | null
   updated_at: string | null
+}
+
+export type Stats = {
+  project_count: number
+  scan_count: number
+  open_by_severity: Record<string, number>
+  suppressed_count: number
+  explanations_completed: number
+  avg_latency_ms: number | null
+}
+
+export type ScanCompare = {
+  base: Scan
+  head: Scan
+  fixed: Finding[]
+  new: Finding[]
+  still_open: Finding[]
 }

@@ -63,6 +63,15 @@ def _history_count(session_factory, finding_id: int) -> int:
     return count
 
 
+async def test_unknown_status_is_rejected(client, session_factory) -> None:
+    await register_and_login(client, "ada@example.com")
+    finding_id = _finding(session_factory)
+    response = await client.patch(f"/findings/{finding_id}/status", json={"status": "bogus"})
+    assert response.status_code == 422
+    assert (await client.get(f"/findings/{finding_id}")).json()["status"] == "open"
+    assert _history_count(session_factory, finding_id) == 0
+
+
 async def test_false_positive_requires_a_reason(client, session_factory) -> None:
     await register_and_login(client, "ada@example.com")
     finding_id = _finding(session_factory)

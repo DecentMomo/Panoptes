@@ -62,3 +62,20 @@ class FindingOut(BaseModel):
     status: str
     status_reason: str | None
     created_at: datetime
+
+
+class ScanCompareOut(BaseModel):
+    base: ScanOut
+    head: ScanOut
+    fixed: list[FindingOut]
+    new: list[FindingOut]
+    still_open: list[FindingOut]
+
+
+class StatsOut(BaseModel):
+    project_count: int
+    scan_count: int
+    open_by_severity: dict[str, int]
+    suppressed_count: int
+    explanations_completed: int
+    avg_latency_ms: int | None

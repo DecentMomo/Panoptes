@@ -156,6 +156,14 @@ export function ProjectDetailPage() {
         <p className="text-sm text-muted-foreground">No scans yet.</p>
       ) : (
         <div className="flex flex-col gap-3">
+          {scans.data.filter((scan) => scan.status === "completed" || scan.status === "partial")
+            .length >= 2 ? (
+            <p className="text-sm">
+              <Link className="underline underline-offset-4" to={`/projects/${id}/compare`}>
+                Compare scans
+              </Link>
+            </p>
+          ) : null}
           {scans.data.map((scan) => (
             <ScanRow key={scan.id} scan={scan} />
           ))}

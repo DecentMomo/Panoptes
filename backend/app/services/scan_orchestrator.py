@@ -35,6 +35,7 @@ from app.scanners.gitleaks_runner import scan as run_gitleaks
 from app.scanners.gitleaks_runner import version as gitleaks_version
 from app.scanners.semgrep_runner import scan as run_semgrep
 from app.scanners.semgrep_runner import version as semgrep_version
+from app.services.carry_over import carry_over
 
 logger = logging.getLogger("panoptes")
 
@@ -154,6 +155,8 @@ def _execute(db: Session, scan: Scan, directory: Path) -> None:
         raise RuntimeError(f"scan {scan.id} lost findings before storing them")
     for row in rows:
         db.add(row)
+    db.flush()
+    carry_over(db, scan, rows)
     scan.status = "completed" if succeeded == len(_scanners()) else "partial"
     scan.finished_at = datetime.now(UTC)
     db.commit()

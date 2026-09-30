@@ -1,5 +1,5 @@
 import { api } from "@/api/client"
-import type { Finding, Scan, ScanDetail } from "@/types"
+import type { Finding, Scan, ScanCompare, ScanDetail } from "@/types"
 
 export function listScans(projectId: number): Promise<Scan[]> {
   return api<Scan[]>(`/projects/${projectId}/scans`)
@@ -24,4 +24,12 @@ export function getScan(scanId: number): Promise<ScanDetail> {
 
 export function listFindings(scanId: number): Promise<Finding[]> {
   return api<Finding[]>(`/scans/${scanId}/findings`)
+}
+
+export function compareScans(
+  projectId: number,
+  base: number,
+  head: number,
+): Promise<ScanCompare> {
+  return api<ScanCompare>(`/projects/${projectId}/compare?base=${base}&head=${head}`)
 }

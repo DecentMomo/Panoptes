@@ -1,7 +1,7 @@
 # Security
 
 This file records the threats Panoptes is built to resist and the control that
-addresses each one. Later phases add the sections for git cloning and the LLM.
+addresses each one.
 
 ## Authentication and access control
 
@@ -12,7 +12,7 @@ addresses each one. Later phases add the sections for git cloning and the LLM.
 | Token theft through XSS | The access token is an `HttpOnly` cookie, so page JavaScript cannot read it. |
 | Cross-site request forgery | Unsafe requests must repeat the `csrf_token` cookie (not HttpOnly) in the `X-CSRF-Token` header. A cross-site page can trigger the cookie but cannot read it, so it cannot set the header. The value is not a random string: it is a nonce plus an HMAC of the user id under `SECRET_KEY`. Matching cookie and header is not enough; `verify_csrf` checks the MAC against the user id in the access token (signature checked, expiry ignored so logout still works after the access token expires). An attacker who can write cookies for the domain can plant a pair, but cannot produce a MAC for the victim's user id. |
 | Account enumeration by timing | A login for an unknown email still runs a bcrypt check against a dummy hash, and returns the same 401 body as a wrong password. |
-| Broken object level authorization | Every project query goes through `get_owned_project`, and every scan query through `get_owned_scan`, which joins to the owning user. Another user's project or scan returns 404, so the id does not even confirm that it exists. Covered by `test_bola.py`. |
+| Broken object level authorization | Every project query goes through `get_owned_project`, every scan query through `get_owned_scan`, and every finding query through `get_owned_finding`, each joining to the owning user. Compare and stats are scoped the same way: compare 404s if either scan is not owned or not in the project, and `/stats` only counts the current user's rows. Another user's object returns 404, so the id does not even confirm that it exists. Covered by `test_bola.py`, `test_scan_compare.py`, `test_stats.py`, and the finding-status BOLA test. |
 | Placeholder signing key | The process logs a warning at startup if `SECRET_KEY` still starts with `change-me` or is shorter than 32 bytes. HMAC-SHA256 keys shorter than that are rejected by PyJWT as insecure. |
 
 ## Uploads
@@ -61,6 +61,7 @@ What this does not do:
 | AI request flood | Explanation creation uses an in-memory per-user sliding window, separate from scan rate limiting. Only one model call runs at once by default because concurrent 7B inference on a CPU would compete for memory and make both calls slower. |
 | A model response being treated as HTML | Explanations and suggested fixes are rendered as React text. The frontend lint rule `react/no-danger` rejects raw HTML, and a test checks that a `<script>` tag and markdown in a suggested fix stay text. |
 | Suppressing a finding without a record | Changing a finding's status writes one `finding_status_history` row in the same transaction, with the user and the time. A false positive is rejected, including by a database check, unless it has a non-blank reason. Another user gets 404. History has no edit or delete endpoint. |
+| A suppression silently surviving a later scan | `false_positive` and `accepted_risk` copy onto the next finished scan of the same project only when the fingerprint matches exactly. `fixed` is not copied. The copy writes a history row attributed to the original user, with the original reason and `carried_from_scan_id`. The UI labels it as carried over, not as a new decision. A changed flagged line produces a new fingerprint and an `open` finding. If the previous scan is missing or failed, nothing carries. |
 
 ## Rate limiting
 
@@ -77,5 +78,7 @@ What this does not do:
 - An attacker who can overwrite the `access_token` cookie (subdomain takeover, or a plaintext-HTTP man-in-the-middle, since cookie scope ignores scheme and port) can substitute their own session. That is a stolen session of their own user, not a CSRF bypass for the victim: the CSRF MAC is checked against the user id inside that token.
 - Access tokens last 60 minutes and there is no refresh token. After expiry the user logs in again.
 - Deleting a project deletes its scans, findings, and status history. The history is an audit trail for a finding, not a record that survives the project.
+- Carry-over looks only at the previous finished scan of the same project.
+- Comparing a `partial` scan treats a missing tool's findings as Fixed.
 - There is no password reset or email verification.
 - Login and registration do not require the CSRF header, because the user has no CSRF cookie yet. A site can submit a login form on the victim's behalf (login CSRF). The session cookie is `SameSite=Lax`, which blocks it from being sent on cross-site POSTs afterwards.

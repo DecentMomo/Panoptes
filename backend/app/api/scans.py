@@ -25,7 +25,15 @@ from app.models.project import Project
 from app.models.scan import Scan
 from app.models.scanner_run import ScannerRun
 from app.models.user import User
-from app.schemas.scan import FindingOut, GitScanIn, ScanDetailOut, ScannerRunOut, ScanOut
+from app.schemas.scan import (
+    FindingOut,
+    GitScanIn,
+    ScanCompareOut,
+    ScanDetailOut,
+    ScannerRunOut,
+    ScanOut,
+)
+from app.services.scan_diff import diff_fingerprints
 from app.services.scan_orchestrator import scan_directory
 from app.services.scan_runner import ScanRunner, get_scan_runner
 
@@ -167,6 +175,51 @@ def list_scans(
         db.scalars(
             select(Scan).where(Scan.project_id == project_id).order_by(Scan.created_at.desc())
         )
+    )
+
+
+@router.get("/projects/{project_id}/compare", response_model=ScanCompareOut)
+def compare_scans(
+    project_id: int,
+    base: int,
+    head: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ScanCompareOut:
+    get_owned_project(db, user, project_id)
+    if base == head:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick two different scans.",
+        )
+    base_scan = get_owned_scan(db, user, base)
+    head_scan = get_owned_scan(db, user, head)
+    if base_scan.project_id != project_id or head_scan.project_id != project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    finished = {"completed", "partial"}
+    if base_scan.status not in finished or head_scan.status not in finished:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both scans must have finished.",
+        )
+    base_rows = list(db.scalars(select(Finding).where(Finding.scan_id == base_scan.id)))
+    head_rows = list(db.scalars(select(Finding).where(Finding.scan_id == head_scan.id)))
+    fixed_fps, new_fps, still_fps = diff_fingerprints(
+        {row.fingerprint for row in base_rows},
+        {row.fingerprint for row in head_rows},
+    )
+    head_by_fp = {row.fingerprint: row for row in head_rows}
+
+    def _as_out(rows: list[Finding]) -> list[FindingOut]:
+        ordered = sorted(rows, key=lambda row: (row.file_path, row.line_start, row.fingerprint))
+        return [FindingOut.model_validate(row) for row in ordered]
+
+    return ScanCompareOut(
+        base=ScanOut.model_validate(base_scan),
+        head=ScanOut.model_validate(head_scan),
+        fixed=_as_out([row for row in base_rows if row.fingerprint in fixed_fps]),
+        new=_as_out([row for row in head_rows if row.fingerprint in new_fps]),
+        still_open=_as_out([head_by_fp[fingerprint] for fingerprint in still_fps]),
     )
 
 

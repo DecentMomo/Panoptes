@@ -102,6 +102,8 @@ def change_status(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Finding:
+    if body.status not in STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status.")
     finding = get_owned_finding(db, user, finding_id, lock=True)
     reason = body.reason.strip() if body.reason else None
     if finding.status == body.status:
@@ -114,8 +116,6 @@ def change_status(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A false positive needs a reason.",
         )
-    if body.status not in STATUSES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown status.")
     db.add(
         FindingStatusHistory(
             finding_id=finding.id,
@@ -154,6 +154,7 @@ def list_status_history(
             from_status=history.from_status,
             to_status=history.to_status,
             reason=history.reason,
+            carried_from_scan_id=history.carried_from_scan_id,
             created_at=history.created_at,
         )
         for history, email in rows

@@ -10,6 +10,7 @@ from app.api.auth import router as auth_router
 from app.api.findings import router as findings_router
 from app.api.projects import router as projects_router
 from app.api.scans import router as scans_router
+from app.api.stats import router as stats_router
 from app.core.config import settings
 from app.services.ai_runner import ThreadPoolExplanationRunner
 from app.services.scan_orchestrator import mark_interrupted_scans
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(findings_router)
     app.include_router(projects_router)
     app.include_router(scans_router)
+    app.include_router(stats_router)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
